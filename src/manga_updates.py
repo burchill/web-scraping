@@ -2,7 +2,7 @@
 THE NEW VERSION!
 
 @author: zburchill
-
+ 
 proxy stuff inspired by: https://codelike.pro/create-a-crawler-with-rotating-ip-proxy-in-python/
 '''
 import operator
