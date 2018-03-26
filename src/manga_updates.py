@@ -2,7 +2,7 @@
 THE NEW VERSION!
 
 @author: zburchill
- 
+
 proxy stuff inspired by: https://codelike.pro/create-a-crawler-with-rotating-ip-proxy-in-python/
 '''
 import operator
@@ -34,30 +34,33 @@ TO-DO:
 '''
 
 
-def request_counter_decorator():
-    request_counter += 1
     
 def random_proxy():
-    return random.randint(0, len(proxies_list) - 1)
+    global Proxies_list
+    return random.randint(0, len(Proxies_list) - 1)
 
 # Only does https currently
 def ninja_soupify(url, tolerance=10, **kwargs):
     # If it's time to switch to a new proxy, do so
-    if request_counter % SWITCH_PROXIES_AFTER_N_REQUESTS == 0:
-        proxy_index = random_proxy()
+    global Proxies_list
+    global SWITCH_PROXIES_AFTER_N_REQUESTS
+    global Proxy_index
+    global Request_counter
+    if Request_counter % SWITCH_PROXIES_AFTER_N_REQUESTS == 0:
+        Proxy_index = random_proxy()
     dead_proxy_count = 0
     while dead_proxy_count <= tolerance:
         # If for some reason there isn't a proxies list, make one
-        if not proxies_list: proxies_list = get_proxies()
-        proxy = { "https": "http://{ip}:{port}".format(**proxies_list[proxy_index]) }
+        if not Proxies_list: Proxies_list = get_proxies()
+        proxy = { "https": "http://{ip}:{port}".format(**Proxies_list[Proxy_index]) }
         try:
             r = soupify(url, proxies = proxy, **kwargs)
-            request_counter += 1
+            Request_counter += 1
             return(r)
-        except requests.exceptions.SSLError as err:
-            warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d=proxies_list[proxy_index], error_m=err))
-            del proxies_list[proxy_index]
-            proxy_index = random_proxy()
+        except (requests.exceptions.SSLError, requests.exceptions.ProxyError) as err:
+            warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d=Proxies_list[Proxy_index], error_m=err))
+            del Proxies_list[Proxy_index]
+            Proxy_index = random_proxy()
             dead_proxy_count += 1
     raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
          
@@ -96,7 +99,7 @@ def check_whether_series_valid(manga_id):
     """
     Loads a manga series page and sees if it is real or not
     """
-    check_soup = soupify(SERIES_METADATA_URL_FORMAT.format(manga_id))
+    check_soup = ninja_soupify(SERIES_METADATA_URL_FORMAT.format(manga_id))
     return(check_soup.find(is_error_tag) is None)
 
 def assert_category_tag(tag):
@@ -175,7 +178,7 @@ def get_manga_ids_from_table(url):
     
     I.e. at urls like: "https://www.mangaupdates.com/series.html?page={0}&letter={1}&perpage=100&filter=some_releases&type=manga"
     """
-    s = soupify(url)
+    s = ninja_soupify(url)
     # Finds the table that holds all the rows of manga
     table = s.find("table",{"class":"series_rows_table"})
     # Removes the first 2 rows (cuz they're titles)
@@ -220,7 +223,7 @@ def collect_valid_series():
             # Sometimes there aren't manga that start with certain characters
             print("no "+letter+" values")
         # Gets the number of pages that start with that letter combo...
-        page_count = get_page_count(soupify(url_format.format(1,letter)))
+        page_count = get_page_count(ninja_soupify(url_format.format(1,letter)))
         if page_count:
             # ...and puts them on the queue too
             for i in range(2, page_count+1):
@@ -365,24 +368,14 @@ def clean_default_category(soup_obj):
     """
     return([e.strip() for e in soup_obj.strings])
 
-# clean_status_category = clean_category_default
-print("ABABABABA")
-s = soupify("https://www.mangaupdates.com/series.html?id=16")
-print("ABABABABA")
-d = get_all_categories(s)
 
-# print(get_strings(d["User Rating"]))
-print(d["User Rating"].next_element.split())
-print(d["User Rating"].next_element.next_element.next_element.next_element.string)
-print("XXXX")
-print(clean_status_category(d["Status in Country of Origin"]))
-print(d.keys())
+
 
 
 def metadata_task(url_format, manga_id):
     print("manga id: {0}".format(manga_id))
     # Load the series' page and soupify it
-    soup = soupify(url_format.format(manga_id), new_header=True)
+    soup = ninja_soupify(url_format.format(manga_id), new_header=True)
     # Get the categories
     category_dict = get_all_categories(soup)
 #     image_cat_name = [e for e in category_dict.keys() if "Image" in e]
@@ -440,7 +433,7 @@ def metadata_task(url_format, manga_id):
 def manga_worker():
     global update_info_list
     global metadata_list
-    global error_list
+    global Error_list
     while True:
         manga_id, is_metadata, *page_number = manga_q.get()
         try:
@@ -454,7 +447,7 @@ def manga_worker():
                     update_info_list+=issue_results
         except Exception as error_m:
             print("MANGA ID FUCK UP = {!s}".format(manga_id))
-            error_list+=[[str(error_m), manga_id, is_metadata]]
+            Error_list+=[[str(error_m), manga_id, is_metadata]]
 #             raise
         finally:
             manga_q.task_done()
@@ -462,7 +455,7 @@ def manga_worker():
 # def manga_worker():
 #     global update_info_list
 #     global metadata_list
-#     global error_list
+#     global Error_list
 #     while True:
 #         manga_id, is_metadata, *page_number = manga_q.get()
 #         if is_metadata:
@@ -487,7 +480,7 @@ def manga_worker():
 def issue_task(url_format, manga_id, page_number):
     print("manga id: {0}, page: {1}".format(manga_id, page_number))
     # Load the page and soupify it
-    soup = soupify(url_format.format(manga_id, page_number))
+    soup = ninja_soupify(url_format.format(manga_id, page_number))
     # If it's the first page and a valid series...
     if check_whether_series_valid(manga_id):
         if page_number == 1:
@@ -553,8 +546,8 @@ def main():
 # #         filewriter.writerows(update_info_list)
 #         print(len(update_info_list))
     print(len(set(metadata_list)))
-    print(len(error_list))
-    print(",".join([e[1] for e in error_list]))
+    print(len(Error_list))
+    print(",".join([e[1] for e in Error_list]))
     print("DONE")
 
 
@@ -566,7 +559,7 @@ def main():
 # valid_series_ids = load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
 
 # 
-# s=soupify("https://www.mangaupdates.com/series.html?id=138324")
+# s=ninja_soupify("https://www.mangaupdates.com/series.html?id=138324")
 # d=get_all_categories(s)
 # print(clean_list_stats_category(d["List Stats"]))
 # # print(list(d["List Stats"].strings))
@@ -578,9 +571,9 @@ def main():
 # # stats = [e for e in d["List Stats"].find_all("b")]
 # # print([e.next_sibling.split()[0] for e in stats])
 
-print("BBBBBBBBBBBBBBBBBB")
-if __name__ == "__main__":
-    # Constants
+
+def define_global_variables():
+    # Global Constants
     global NUMBER_OF_NONALPHA_MANGA_PAGES # the number of pages of manga that don't begin with letters we have to scroll through 
     NUMBER_OF_NONALPHA_MANGA_PAGES = 4 
     global EXPECTED_COL_NUM
@@ -592,14 +585,33 @@ if __name__ == "__main__":
     global SWITCH_PROXIES_AFTER_N_REQUESTS # make really really big if you don't want to switch
     SWITCH_PROXIES_AFTER_N_REQUESTS = 10
     
-    global error_list
-    error_list = []
-    global request_counter 
-    request_counter = 0
-    global proxies_list
-    proxies_list = get_proxies()
-    global proxy_index
+    global Error_list # something to store all the errors
+    Error_list = []
+    global Request_counter # counts how many https requests were made, in order to keep changing proxies
+    Request_counter = 0
+    global Proxies_list # list of usable proxies
+    Proxies_list = get_proxies()
+    global Proxy_index # the index of the current proxy in the list
+    Proxy_index = 0
+
+
+if __name__ == "__main__":
+    define_global_variables()
     
 #     metadata_task(SERIES_METADATA_URL_FORMAT,16)
     print("CCCCCCCCCCCCCC")
-    main()
+    
+    
+    # clean_status_category = clean_category_default
+#     print("ABABABABA")
+#     s = ninja_soupify("https://www.mangaupdates.com/series.html?id=3920")
+#     print("ABABABABA")
+#     d = get_all_categories(s)
+#     
+#     # print(get_strings(d["User Rating"]))
+#     print(d["User Rating"].next_element.split())
+#     print(d["User Rating"].next_element.next_element.next_element.next_element.string)
+#     print("XXXX")
+#     print(clean_status_category(d["Status in Country of Origin"]))
+#     print(d.keys())
+#     main()
