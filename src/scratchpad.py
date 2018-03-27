@@ -229,34 +229,96 @@ def ninja_soupify(url, tolerance=10, **kwargs):
             dead_proxy_count += 1
     raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
 
-
-@proxy_decorator(10)
-def shit():
-    print("________________")
-    print(shit.proxies)
-    print(shit.proxy_index)
-    print(len(shit.proxies))
-    pass
-
-
-print(shit.proxies)
-print(shit.proxy_index)
-print(len(shit.proxies))
-
-shit()
-
-
-print(ninja_soupify.proxies)
-print(ninja_soupify.proxy_index)
-print(len(ninja_soupify.proxies))
-
-# ninja_soupify.proxies = [{"ip": "10", "port":"80"}]
-# ninja_soupify.proxy_index = 0
-s=ninja_soupify("https://google.com")
-print(s)
-s=ninja_soupify("https://google.com")
-print(s)
-s=ninja_soupify("https://google.com")
-print(s)
+# 
+# @proxy_decorator(10)
+# def shit():
+#     print("________________")
+#     print(shit.proxies)
+#     print(shit.proxy_index)
+#     print(len(shit.proxies))
+#     pass
+# 
+# 
+# print(shit.proxies)
+# print(shit.proxy_index)
+# print(len(shit.proxies))
+# 
+# shit()
+# 
+# 
+# print(ninja_soupify.proxies)
+# print(ninja_soupify.proxy_index)
+# print(len(ninja_soupify.proxies))
+# 
+# # ninja_soupify.proxies = [{"ip": "10", "port":"80"}]
+# # ninja_soupify.proxy_index = 0
+# s=ninja_soupify("https://google.com")
+# print(s)
+# s=ninja_soupify("https://google.com")
+# print(s)
+# s=ninja_soupify("https://google.com")
+# print(s)
+#          
          
+         
+         
+         
+class ninja_soupify_class(object):
+    """ A class meant to store the proxy information for a function.
+    
+    If you want that function's docs, use `<that function>.__doc__`. """
+    
+    def __init__(self, switch_proxies_after_n_calls):
+        self.switch_after_n = switch_proxies_after_n_calls
+        self.numcalls = self.proxy_index = 0
+        self.proxies = self.get_proxies()
+        
+    def __call__(self, url, tolerance=10, **kwargs):
+        self.numcalls += 1
+        if self.numcalls % self.switch_after_n == 0:
+            self.proxy_index = self.get_random_proxy_index()        
+        dead_proxy_count = 0
+        # if you burn through too many proxies, there's probably a problem
+        while dead_proxy_count <= tolerance:
+            # If for some reason there isn't a proxies list, make one
+            if not self.proxies: 
+                self.proxies = self.get_proxies()
+            # If the proxy index needs to be updated
+            if self.proxy_index >= len(self.proxies):
+                self.proxy_index = self.get_random_proxy_index()
+            # Make a dict that Requests can use
+            proxy = { "https": "http://{ip}:{port}".format(**self.proxies[self.proxy_index]) }
+            try:
+                r = soupify(url, proxies = proxy, **kwargs)
+                return(r)
+            # If the proxy doesn't work:
+            except (requests.exceptions.SSLError, requests.exceptions.ProxyError) as err:
+                warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d = self.proxies[self.proxy_index], error_m=err))
+                del self.proxies[self.proxy_index]
+                dead_proxy_count += 1
+        raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
+        
+    def get_random_proxy_index(self):
+        "Return a random index from the proxy list"
+        return random.randint(0, len(self.proxies) - 1)
+    
+    # inspired by: 'https://codelike.pro/create-a-crawler-with-rotating-ip-proxy-in-python/'
+    @staticmethod
+    def get_proxies(**kwargs):
+        """ 
+        Returns a list of dicts of ssl proxies from sslproxies.org
+        """
+        proxies = []
+        proxy_url = 'https://www.sslproxies.org/'
+        soup = soupify(proxy_url, **kwargs)
+        for row in soup.tbody.find_all("tr"):
+            proxies.append({
+                'ip':   row.find_all('td')[0].string,
+                'port': row.find_all('td')[1].string
+            })
+        return(proxies)
+
+ninja_soupify = ninja_soupify_simple(10)
+print(ninja_soupify("https://google.com"))
+
 
