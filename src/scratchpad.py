@@ -13,6 +13,36 @@ import random, requests
 from basic_functions import soupify
 from warnings import warn
 from basic_functions import PageScrapeException
+import functools
+
+
+# def decorator(switch_after_n):
+#     def inner_decorator(fn):
+#         return(dec_test(fn, switch_after_n))
+#     return inner_decorator
+# 
+# class dec_test(object):
+#     def __init__(self, f, x):
+#         self.__f = f
+#         self.__numcalls = 0
+#         self.newcolor = x
+#     
+#     def __call__(self, *args, **kwargs):
+#         self.__numcalls += 1
+#         return self.__f(*args, **kwargs)
+#     
+#     def count(self):
+#         return(self.__numcalls)
+#     
+# @decorator(100)
+# def w():
+#     print("WWWWW")
+#     print(w.newcolor)
+# w()
+# w()
+# print(w.count())
+# x=0/0
+    
 
 
 # class countcalls_old(object):
@@ -93,21 +123,29 @@ from basic_functions import PageScrapeException
 #         "Return a dict of {function: # of calls} for all registered functions."
 #         return dict([(f.__name__, countcalls.__instances[f].__numcalls) for f in countcalls.__instances])
     
-    
+def proxy_decorator(switch_after_n):
+    """ A decorator that let's you specify the number of requests before 
+    switching proxies for `manage_proxies` and keep the decorator syntactic sugar."""
+    def inner_decorator(fn):
+        functools.wraps(fn)
+        return(manage_proxies(fn, switch_after_n))
+    return inner_decorator
+
 class manage_proxies(object):
-    "Decorator "
+    """ A class meant to store the proxy information for a function.
     
-    def __init__(self, f):
+    If you want that function's docs, use `<that function>.__doc__`. """
+    
+    def __init__(self, f, switch_proxies_after_n_calls):
         self.__f = f
-        self.__numcalls = 0
-        self.proxy_index = 0
+        self._switch_after_n = switch_proxies_after_n_calls
+        self.__numcalls = self.proxy_index = 0
         self.proxies = self.get_proxies()
-        self.test =["A"]
+        functools.update_wrapper(self, f) #
     
     def __call__(self, *args, **kwargs):
-        global SWITCH_PROXIES_AFTER_N_REQUESTS
         self.__numcalls += 1
-        if self.__numcalls % SWITCH_PROXIES_AFTER_N_REQUESTS == 0:
+        if self.__numcalls % self._switch_after_n == 0:
             self.proxy_index = self.get_random_proxy_index()
         return self.__f(*args, **kwargs)
     
@@ -137,29 +175,30 @@ class manage_proxies(object):
     
 
 
+
     
     
-@manage_proxies
-def x():
-    print("THIS IS X")
-    print(x.count())
+# @manage_proxies
+# def x():
+#     print("THIS IS X")
+#     print(x.count())
 
-@manage_proxies
-def g():
-    print("THIS IS G")
-    print(g.count())
-
-x()
-x()
-x()
+# @manage_proxies
+# def g():
+#     print("THIS IS G")
+#     print(g.count())
+# 
+# x()
+# x()
+# x()
 
 
 
 #     print(g.proxies)
 
-g()
-g()
-g()
+# g()
+# g()
+# g()
 
 
 
@@ -167,7 +206,7 @@ g()
 
 
 # Only does https currently
-@manage_proxies
+@proxy_decorator(10)
 def ninja_soupify(url, tolerance=10, **kwargs):
     dead_proxy_count = 0
     # if you burn through too many proxies, there's probably a problem
@@ -191,20 +230,18 @@ def ninja_soupify(url, tolerance=10, **kwargs):
     raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
 
 
-@manage_proxies
+@proxy_decorator(10)
 def shit():
     print("________________")
     print(shit.proxies)
     print(shit.proxy_index)
     print(len(shit.proxies))
-    print(shit.test)
     pass
 
 
 print(shit.proxies)
 print(shit.proxy_index)
 print(len(shit.proxies))
-print(shit.test)
 
 shit()
 
@@ -212,7 +249,6 @@ shit()
 print(ninja_soupify.proxies)
 print(ninja_soupify.proxy_index)
 print(len(ninja_soupify.proxies))
-print(ninja_soupify.test)
 
 # ninja_soupify.proxies = [{"ip": "10", "port":"80"}]
 # ninja_soupify.proxy_index = 0
