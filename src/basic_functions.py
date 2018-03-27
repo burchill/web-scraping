@@ -56,7 +56,7 @@ def try_to_urlopen(url_t, timeout_sec=30, n_attempts=2, new_header=True,
             attempts += 1
             warning_string = "Url '{url!s}' timed out. {n!s} tries until skipping".format(url=url_t, n=n_attempts-attempts)
             logging.warning(warning_string)
-    if attempts == n_attempts:
+    if attempts > n_attempts:
         raise requests.exceptions.Timeout("URL '{url!s}' timed out {n!s} times, at {sec!s} sec. each try.".format(url=url_t, n=n_attempts, sec=timeout_sec))
     return(r)
 
