@@ -14,7 +14,7 @@ import random, requests
 import threading
 from queue import Queue
 import time
-from basic_functions import soupify, PageScrapeException, get_proxies
+from basic_functions import soupify, PageScrapeException, ninja_soupify_simpler
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -23,7 +23,6 @@ from itertools import combinations_with_replacement
 
 import pickle
 from functools import wraps # for the decorators
-from email import message
 
 
 '''
@@ -587,20 +586,15 @@ def define_global_variables():
     
     global Error_list # something to store all the errors
     Error_list = []
-    global Request_counter # counts how many https requests were made, in order to keep changing proxies
-    Request_counter = 0
-    global Proxies_list # list of usable proxies
-    Proxies_list = get_proxies()
-    global Proxy_index # the index of the current proxy in the list
-    Proxy_index = 0
 
 
 if __name__ == "__main__":
     define_global_variables()
+    ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     
 #     metadata_task(SERIES_METADATA_URL_FORMAT,16)
     print("CCCCCCCCCCCCCC")
-    
+    print(ninja_soupify("https://google.com"))
     
     # clean_status_category = clean_category_default
 #     print("ABABABABA")
