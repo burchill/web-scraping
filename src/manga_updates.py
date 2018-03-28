@@ -29,6 +29,7 @@ from functools import wraps # for the decorators
 TO-DO:
      
      * make the constants all good (ie series_metadata_url_format and NUMBER_OF_NONALPHA_MANGA_PAGES)
+     * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
      
 '''
 
@@ -431,6 +432,7 @@ def manga_worker():
     global update_info_list
     global metadata_list
     global Error_list
+    global manga_q
     while True:
         manga_id, is_metadata, *page_number = manga_q.get()
         try:
@@ -439,7 +441,7 @@ def manga_worker():
                 with metadata_lock:
                     metadata_list+=[metadata_results]
             else:
-                issue_results = issue_task(ISSUE_URL_FORMAT, manga_id, page_number[0])
+                issue_results = issue_task(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), manga_id, page_number[0])
                 with update_info_lock:
                     update_info_list+=issue_results
         except Exception as error_m:
@@ -466,6 +468,24 @@ def manga_worker():
 #         manga_q.task_done()
 
 
+
+def get_issue_info_from_table(soup_obj, manga_id, expected_number_of_columns=5):
+    """ Returns all the information for each row for a soup object of an updates page, 
+    with the last value of each row being the manga id number.
+    
+    If it doesn't have the right number of columns (default being 5), return `None`"""
+    # Get the rows of the updates
+    soup_rows = get_soup_row_list(soup_obj)
+    # Turn the list of soup objects into a list of strings
+    string_rows_list = [soup_row_to_string_list(e) for e in soup_rows]
+    # Add in the manga id
+    string_rows_list[:] = [e+[manga_id] for e in string_rows_list]
+    # If the first row doesn't have the right amount of columns...
+    # it's probably a page with no updates, so don't return anything
+    if len(string_rows_list[0]) == expected_number_of_columns + 1:
+        return(string_rows_list)
+    else:
+        return(None)
     
 
 
@@ -474,12 +494,12 @@ def manga_worker():
             
 
 
-def issue_task(url_format, manga_id, page_number):
-    print("manga id: {0}, page: {1}".format(manga_id, page_number))
+def issue_task(url, manga_id, page_number):
+#     print("manga id: {0}, page: {1}".format(manga_id, page_number))
     # Load the page and soupify it
-    soup = ninja_soupify(url_format.format(manga_id, page_number))
+    soup = ninja_soupify(url)
     # If it's the first page and a valid series...
-    if check_whether_series_valid(manga_id):
+    if check_whether_series_valid(soup):
         if page_number == 1:
             # see how many other pages there are...
             max_page = get_page_count(soup)
@@ -487,18 +507,9 @@ def issue_task(url_format, manga_id, page_number):
                 # and put them on the queue too
                 for i in range(2, max_page+1):
                     manga_q.put([manga_id, False, i])
-        # Get the rows of the updates
-        soup_rows = get_soup_row_list(soup)
-        # Turn the list of soup objects into a list of strings
-        string_rows_list = [soup_row_to_string_list(e) for e in soup_rows]
-        # Add in the manga id
-        string_rows_list[:] = [e+[manga_id] for e in string_rows_list]
-        # If the first row doesn't have the right amount of columns...
-        # it's probably a page with no updates, so don't return anything
-        if len(string_rows_list[0]) == EXPECTED_COL_NUM+1:
-            return(string_rows_list)
-        else:
-            return(None)
+                    
+        global EXPECTED_COL_NUM
+        return(get_issue_info_from_table(soup, manga_id, EXPECTED_COL_NUM))
     else: 
         return(None)
          
