@@ -94,12 +94,11 @@ def is_page_count(tag):
     try: return "specialtext" in tag["class"] and "center" in tag["align"] and "33%" in tag["width"] and tag.name=="td"
     except KeyError: return(False)
     
-def check_whether_series_valid(manga_id):
+def check_whether_series_valid(soup):
     """
-    Loads a manga series page and sees if it is real or not
+    Checks a soup object and checks if it's a "real" manga series page or not
     """
-    check_soup = ninja_soupify(SERIES_METADATA_URL_FORMAT.format(manga_id))
-    return(check_soup.find(is_error_tag) is None)
+    return(soup.find(is_error_tag) is None)
 
 def assert_category_tag(tag):
     """
