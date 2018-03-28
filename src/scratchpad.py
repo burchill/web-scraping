@@ -3,18 +3,27 @@ Created on Mar 26, 2018
 
 @author: zburchill
 '''
+from bs4 import BeautifulSoup
 
 '''
 TO-DO: 
     - add threading locks!!!!!!!!!!!!
 '''
 
-import random, requests
-from basic_functions import soupify
-from warnings import warn
-from basic_functions import PageScrapeException
-import functools
+from basic_functions import *
+from manga_updates import *
 
+
+
+test_url = "/Users/zburchill/Desktop/test_scraped_page.html"
+
+with open(test_url,"r", encoding="utf-16") as f:
+    s = f.read()
+    soup = BeautifulSoup(s)
+
+    
+
+    
 
 
 

@@ -15,6 +15,10 @@ from bs4 import BeautifulSoup # https://www.crummy.com/software/BeautifulSoup/bs
 from PIL import Image  # Use "Pillow"! http://pillow.readthedocs.io/en/latest/installation.html
 import requests # http://docs.python-requests.org/en/latest/user/install/#install
 
+
+
+# ------------------------------ General loading / internet functions ------------------------------ #
+
 # A generic custom exception so that I know when a failed to load properly or image failed to `Image.save()`
 class PageScrapeException(Exception):
     def __init__(self, message, url="NotGiven"):
@@ -70,11 +74,20 @@ def load_image(image_url, *args, **kwargs):
     im = Image.open(image_file)
     return(im)
 
+
+# Note, doesn't let you pass additional args to `soupify`
+def soupify_and_pass(url, f, *args, **kwargs):
+    """This function soupifies a url, and passes it in as the first argument of a function.
+    Note that it will not pass any extra arguments in to the `soupify` function as it is currently."""
+    soup = soupify(url)
+    return(f(soup, *args, **kwargs))
+    
+
 # ---------------------------------- soup functions ---------------------------------------- #
 
-def soupify(url_t, safer=False, **kwargs):
+def soupify(url, safer=False, **kwargs):
     """ Returns a bs4 soup object from a url """
-    response_for_url = try_to_urlopen(url_t, safer=safer, **kwargs)
+    response_for_url = try_to_urlopen(url, safer=safer, **kwargs)
     soup = BeautifulSoup(response_for_url.text)
     # turns the page into a soup object
     return(soup)

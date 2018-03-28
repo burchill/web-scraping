@@ -14,7 +14,7 @@ import random, requests
 import threading
 from queue import Queue
 import time
-from basic_functions import soupify, PageScrapeException, ninja_soupify_simpler
+from basic_functions import soupify, soupify_and_pass, PageScrapeException, ninja_soupify_simpler
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -371,9 +371,9 @@ def clean_default_category(soup_obj):
 
 
 
-def metadata_task(url):
+def metadata_task(soup):
     # Load the series' page and soupify it
-    soup = ninja_soupify(url, new_header=True)
+#     soup = ninja_soupify(url, new_header=True)
     # Get the categories
     category_dict = get_all_categories(soup)
 #     image_cat_name = [e for e in category_dict.keys() if "Image" in e]
@@ -437,11 +437,13 @@ def manga_worker():
         manga_id, is_metadata, *page_number = manga_q.get()
         try:
             if is_metadata:
-                metadata_results = metadata_task(SERIES_METADATA_URL_FORMAT.format(manga_id))
+                # Uses the soupify_and_pass function to load a url and pass it into the metadata_task function
+                metadata_results = soupify_and_pass(SERIES_METADATA_URL_FORMAT.format(manga_id), metadata_task)
                 with metadata_lock:
                     metadata_list+=[metadata_results]
             else:
-                issue_results = issue_task(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), manga_id, page_number[0])
+                # Uses the soupify_and_pass function to load a url and pass it into the issue_task function
+                issue_results = soupify_and_pass(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
                 with update_info_lock:
                     update_info_list+=issue_results
         except Exception as error_m:
