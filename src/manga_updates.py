@@ -371,10 +371,9 @@ def clean_default_category(soup_obj):
 
 
 
-def metadata_task(url_format, manga_id):
-    print("manga id: {0}".format(manga_id))
+def metadata_task(url):
     # Load the series' page and soupify it
-    soup = ninja_soupify(url_format.format(manga_id), new_header=True)
+    soup = ninja_soupify(url, new_header=True)
     # Get the categories
     category_dict = get_all_categories(soup)
 #     image_cat_name = [e for e in category_dict.keys() if "Image" in e]
@@ -437,7 +436,7 @@ def manga_worker():
         manga_id, is_metadata, *page_number = manga_q.get()
         try:
             if is_metadata:
-                metadata_results = metadata_task(SERIES_METADATA_URL_FORMAT, manga_id)
+                metadata_results = metadata_task(SERIES_METADATA_URL_FORMAT.format(manga_id))
                 with metadata_lock:
                     metadata_list+=[metadata_results]
             else:
