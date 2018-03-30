@@ -17,7 +17,10 @@ import requests # http://docs.python-requests.org/en/latest/user/install/#instal
 
 
 
+
+
 # ------------------------------ General loading / internet functions ------------------------------ #
+
 
 # A generic custom exception so that I know when a failed to load properly or image failed to `Image.save()`
 class PageScrapeException(Exception):
@@ -96,7 +99,8 @@ def soupify(url, safer=False, **kwargs):
 # This function just makes it so that it puts the arguments in `soup.find()` in the right way
 # Don't fret about this too much if you aren't familiar with bs4
 def clean_find(soup_t, args):
-    """ Does `bs4.BeautifulSoup.find()`, but if the argument is a non-function variable, it unpacks the arguments """
+    """ Does `bs4.BeautifulSoup.find()`, but if the argument is a non-function variable, it unpacks the arguments.
+    E.g.: clean_find(soup, ['div',{'class': 'cc-newsbody'}]) """
     # for Python 3.x but before 3.2, use: `if hasattr(args, '__call__'):`
     if callable(args):
         return(soup_t.find(args))
@@ -257,5 +261,7 @@ class ninja_soupify_simpler(object):
 # ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
 # print(ninja_soupify("https://google.com"))
 
-
+def remove_duplicate_elements(l):
+    """ Right now, just `list(set(l))` """
+    return (list(set(l)))
 
