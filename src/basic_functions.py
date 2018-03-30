@@ -16,7 +16,16 @@ from PIL import Image  # Use "Pillow"! http://pillow.readthedocs.io/en/latest/in
 import requests # http://docs.python-requests.org/en/latest/user/install/#install
 
 
+# ------------------------------ Real basic functions ------------------------------ #
 
+# Turns navigable strings to normal ones
+def get_string(soup_element):
+    """ returns a bs4 element's NavigableString as a normal one """
+    return(str(soup_element.string))
+
+def remove_duplicate_elements(l):
+    """ Right now, just `list(set(l))` """
+    return (list(set(l)))
 
 
 # ------------------------------ General loading / internet functions ------------------------------ #
@@ -261,7 +270,5 @@ class ninja_soupify_simpler(object):
 # ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
 # print(ninja_soupify("https://google.com"))
 
-def remove_duplicate_elements(l):
-    """ Right now, just `list(set(l))` """
-    return (list(set(l)))
+
 
