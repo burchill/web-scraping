@@ -14,7 +14,8 @@ import random, requests
 import threading
 from queue import Queue
 import time
-from basic_functions import soupify, soupify_and_pass, PageScrapeException, ninja_soupify_simpler
+from basic_functions import soupify_and_pass, PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
+    clean_find
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -23,6 +24,8 @@ from itertools import combinations_with_replacement
 
 import pickle
 from functools import wraps # for the decorators
+from email.policy import default
+from posix import remove
 
 
 '''
@@ -33,36 +36,36 @@ TO-DO:
      
 '''
 
-
-    
-def random_proxy():
-    global Proxies_list
-    return random.randint(0, len(Proxies_list) - 1)
-
-# Only does https currently
-def ninja_soupify(url, tolerance=10, **kwargs):
-    # If it's time to switch to a new proxy, do so
-    global Proxies_list
-    global SWITCH_PROXIES_AFTER_N_REQUESTS
-    global Proxy_index
-    global Request_counter
-    if Request_counter % SWITCH_PROXIES_AFTER_N_REQUESTS == 0:
-        Proxy_index = random_proxy()
-    dead_proxy_count = 0
-    while dead_proxy_count <= tolerance:
-        # If for some reason there isn't a proxies list, make one
-        if not Proxies_list: Proxies_list = get_proxies()
-        proxy = { "https": "http://{ip}:{port}".format(**Proxies_list[Proxy_index]) }
-        try:
-            r = soupify(url, proxies = proxy, **kwargs)
-            Request_counter += 1
-            return(r)
-        except (requests.exceptions.SSLError, requests.exceptions.ProxyError) as err:
-            warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d=Proxies_list[Proxy_index], error_m=err))
-            del Proxies_list[Proxy_index]
-            Proxy_index = random_proxy()
-            dead_proxy_count += 1
-    raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
+# 
+#     
+# def random_proxy():
+#     global Proxies_list
+#     return random.randint(0, len(Proxies_list) - 1)
+# 
+# # Only does https currently
+# def ninja_soupify(url, tolerance=10, **kwargs):
+#     # If it's time to switch to a new proxy, do so
+#     global Proxies_list
+#     global SWITCH_PROXIES_AFTER_N_REQUESTS
+#     global Proxy_index
+#     global Request_counter
+#     if Request_counter % SWITCH_PROXIES_AFTER_N_REQUESTS == 0:
+#         Proxy_index = random_proxy()
+#     dead_proxy_count = 0
+#     while dead_proxy_count <= tolerance:
+#         # If for some reason there isn't a proxies list, make one
+#         if not Proxies_list: Proxies_list = get_proxies()
+#         proxy = { "https": "http://{ip}:{port}".format(**Proxies_list[Proxy_index]) }
+#         try:
+#             r = soupify(url, proxies = proxy, **kwargs)
+#             Request_counter += 1
+#             return(r)
+#         except (requests.exceptions.SSLError, requests.exceptions.ProxyError) as err:
+#             warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d=Proxies_list[Proxy_index], error_m=err))
+#             del Proxies_list[Proxy_index]
+#             Proxy_index = random_proxy()
+#             dead_proxy_count += 1
+#     raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
          
             
         
@@ -126,6 +129,7 @@ def get_next_sibling_tag(tag):
             next_thing = next_thing.next_sibling
     return(next_thing)
 
+
 def get_strings(soup_obj, start_index=None, end_index=None):
     """
     Concatenates all the strings of an element into a single string. 
@@ -165,6 +169,26 @@ def get_page_count(soup_obj):
     except AttributeError:
         return(None)
 
+def get_id_from_url(url, prefix="series.html\?"):
+    """ Regexes an id from a mangaupdates url.
+    For series, prefix should be "series.html\?", authors should be "authors.html\?", etc.
+    """
+    re_string = "(?<={prefix}id=)([^&])*".format(prefix=prefix)
+    result = re.search(re_string, url)
+    if result: return result.group(0) 
+    else: return None
+
+def get_ids_from_links(soup_obj, prefix="series.html?", remove_duplicates=True):
+    """
+    Searches through all the links, and if they have series' ids, returns them.
+    For series, prefix should be "series.html?", authors should be "authors.html?", etc.
+    """
+    links = [e.get('href') for e in soup_obj.find_all("a")]
+    id_urls = [e for e in links if ("javascript" not in e) and ("id=" in e)]
+    ids = [get_id_from_url(e) for e in id_urls]
+    if remove_duplicates:
+        ids=remove_duplicate_elements(ids)
+    return(ids)
 
 
 
@@ -285,7 +309,7 @@ def clean_genre_category(soup_obj):
     genres = genres[:-1] # Drop the "see more thing")
     return(genres)
 @check_tag_is_category_decorator
-def clean_categories_category(soup_obj, get_only_final_score=True):
+def clean_categories_category(soup_obj):
     """Returns a list of pairs: x = category string, y = final score"""
     categories = soup_obj.find_all("li")
     categories[:] = [(e.string, int(e.a["title"].split()[1])) for e in categories]
@@ -358,71 +382,168 @@ def clean_status_category(soup_obj):
         return(m.group(0)[1:-1])
     else:
         return(False)
+@check_tag_is_category_decorator
+def clean_rec_category(soup_obj):
+    """
+    Similar to the default category cleaner, but removes repeated data before the "More..." if that exists
+    """
+    # Gets the series' ids
+    no_dupe_ids = get_ids_from_links(soup_obj, remove_duplicates=True)
+    
+    # How I take care of the "More..., [...] L,ess..." stuff
+    unlikely_string = "XXZACHBURCHILLXX"
+    default_l = [e.strip() for e in soup_obj.strings]
+    excised = re.search("(?:(?:{0})+M(?:{0})*ore\.\.\.(?:{0})*)(.*)(?:({0})*L(?:{0})*ess\.\.\.(?:{0})*)".format(unlikely_string), 
+                      unlikely_string.join(default_l))
+    if excised:
+        default_l = excised.groups()[0].split(unlikely_string)
+    else: 
+        warn("Manga without the same rec format!")
+    names = [e for e in default_l if e != ""]
+    no_dupe_names = list(set(names))
+    
+    return({"ids": no_dupe_ids, "names": no_dupe_names})
+
+@check_tag_is_category_decorator
+def clean_activity_stats_category(soup_obj):
+    
+    pass
+
+    
+#     for i in range(0,len(default_l)-3):
+#         print("===============")
+#         print(default_l[i])
+#         print("--------------")
+#         if default_l[i] == "M" and default_l[i+1] == "ore...":
+#             print("ZZZZZZZZ")
+#             j = i+2
+#             print(default_l[j])
+#             while default_l[j] == "": 
+#                 print("looop")
+#                 j+=1
+#                 print(default_l[j])
+#                 
+#             good_l = default_l[j:]
+#             assert len(good_l) > 1
+#             k = j+1
+#             while k < len(default_l)-1 and 
+#             return(good_l) 
+
+@check_tag_is_category_decorator
+def clean_related_series_category(soup_obj):
+    """
+    Returns either "N/A" or a dictionary of the following format:
+        key = how the related series is related
+        value = a dictionary where:
+            "count": how many series fall under this relation
+            "list": a list of tuples of (name, series id)
+    """
+    print(soup_obj)
+    links = soup_obj.find_all("a")
+    if not links:
+        if get_strings(soup_obj).strip() == "N/A":
+            return("N/A")
+        else:
+            l = clean_default_category(soup_obj, remove_empty=True)
+            c = len(l)
+            return({"(Misc.)": {"count": c, "list": [(e, None) for e in l]}})
+    d = {}
+    for link in links:
+        series_id = get_id_from_url(link.get("href"))
+        assert series_id != None
+        if link.next_sibling.name == "br":
+            classification = "(Misc.)"
+        else:
+            classification = link.next_sibling.string.strip()
+        name = link.string.strip()
+        if classification in d.keys():
+            mini_d = d[classification]
+            mini_d["count"] += 1
+            mini_d["list"] += [(name, series_id)]
+            d[classification] = mini_d
+        else:
+            mini_d = {}
+            mini_d["count"] = 1
+            mini_d["list"] = [(name, series_id)]
+            d[classification] = mini_d
+    return d
 # This is for any information you want to process later
 @check_tag_is_category_decorator
-def clean_default_category(soup_obj):
+def clean_default_category(soup_obj, remove_empty=False):
     """
     A 'default' category information cleaner. 
     Just returns a list of stripped strings from all of the category content
     """
-    return([e.strip() for e in soup_obj.strings])
+    strings = [e.strip() for e in soup_obj.strings]
+    if remove_empty: return [e.strip() for e in strings if e != ""]
+    else: return strings 
+@check_tag_is_category_decorator
+def get_series_id(soup_obj):
+    """ Requires the "category" category as the soup_obj """
+    def is_java_link(tag):
+        try:  return("javascript:showCat" in tag["href"])
+        except KeyError: return(False)
+    javascript_link = clean_find(soup_obj, is_java_link)
+    if javascript_link:
+        series_id = javascript_link.get("href").split("javascript:showCat(")[-1].split(",")[0]
+        return(series_id)
+    else:
+        warn("Manga does not have an id")
+        return(None)
+    
 
 
 
 
 
 def metadata_task(soup):
-    # Load the series' page and soupify it
-#     soup = ninja_soupify(url, new_header=True)
     # Get the categories
     category_dict = get_all_categories(soup)
 #     image_cat_name = [e for e in category_dict.keys() if "Image" in e]
 #     bleh = category_dict.pop(image_cat_name[0])
     
+    # the metadata dictionary
+    m_d = {}
+    series_id = get_series_id(category_dict["Categories"])
+    
     # Let's turn those categories into useable data
-    genre = clean_genre_category(category_dict["Genre"])
-    categories = clean_categories_category(category_dict["Categories"])
-    forum_stuff= clean_forum_category(category_dict["Forum"])
-    user_ratings = clean_user_rating_category(category_dict["User Rating"])
-    was_anime = clean_anime_category(category_dict["Anime Start/End Chapter"])
-    status = clean_status_category(category_dict["Status in Country of Origin"])
-#     print("----------------")
-#     print(status)
-#     print(category_dict.keys())
+    m_d["genre"] = clean_genre_category(category_dict["Genre"])
+    m_d["categories"] = clean_categories_category(category_dict["Categories"])
+    m_d["forum_stuff"] = clean_forum_category(category_dict["Forum"])
+    m_d["user_ratings"] = clean_user_rating_category(category_dict["User Rating"])
+    m_d["was_anime"] = clean_anime_category(category_dict["Anime Start/End Chapter"])
+    m_d["status"] = clean_status_category(category_dict["Status in Country of Origin"])
+    recs = clean_rec_category(category_dict["Recommendations"])
+    m_d["rec_ids"] = recs["ids"]
+    m_d["rec_names"] = recs["names"]
+    m_d["related_series"] = clean_related_series_category(category_dict["Related Series"])
     
     # ----------- 'Defaultly' cleaned categories:
-    description = clean_default_category(category_dict["Description"])
-    type = clean_default_category(category_dict["Type"])
-    related_series = clean_default_category(category_dict["Related Series"])
-    associated_names = clean_default_category(category_dict["Associated Names"])
-    completely_scanlated = clean_default_category(category_dict["Completely Scanlated?"])
-    last_updated = clean_default_category(category_dict["Last Updated"])
-    category_recs = clean_default_category(category_dict["Category Recommendations"])
-    recs = clean_default_category(category_dict["Recommendations"])
-    authors = clean_default_category(category_dict["Author(s)"])
-    artists = clean_default_category(category_dict["Artist(s)"])
-    year = clean_default_category(category_dict["Year"])
-    original_pub = clean_default_category(category_dict["Original Publisher"])
-    serialized_in = clean_default_category(category_dict["Serialized In (magazine)"])
-    licensed = clean_default_category(category_dict["Licensed (in English)"])
-    english_pub = clean_default_category(category_dict["English Publisher"])
-    
-    
+    m_d["description"] = clean_default_category(category_dict["Description"])
+    m_d["type"] = clean_default_category(category_dict["Type"])
+    m_d["associated_names"] = clean_default_category(category_dict["Associated Names"])
+    m_d["completely_scanlated"] = clean_default_category(category_dict["Completely Scanlated?"])
+    m_d["last_updated"] = clean_default_category(category_dict["Last Updated"])
+    m_d["category_recs"] = clean_default_category(category_dict["Category Recommendations"])
+    m_d["authors"] = clean_default_category(category_dict["Author(s)"], remove_empty=True)
+    m_d["artists"] = clean_default_category(category_dict["Artist(s)"], remove_empty=True)
+    m_d["year"] = clean_default_category(category_dict["Year"], remove_empty=True)
+    m_d["original_pub"] = clean_default_category(category_dict["Original Publisher"], remove_empty=True)
+    m_d["serialized_in"] = clean_default_category(category_dict["Serialized In (magazine)"])
+    m_d["licensed"] = clean_default_category(category_dict["Licensed (in English)"])
+    m_d["english_pub"] = clean_default_category(category_dict["English Publisher"])    
     
     # ----------- Not implemented:
     # activity_stats
+    # getting author information, such as gender/blood type
+    # image (don't see why this is useful)
     
     try:
-        list_stats = clean_list_stats_category(category_dict["List Stats"])
+        m_d["list_stats"] = clean_list_stats_category(category_dict["List Stats"])
     except AssertionError as errorm:
         raise KeyboardInterrupt(str(errorm))
     
-#     print(genre)
-#     print(categories)
-#     print(list_stats)
-#     print(forum_stuff)
-    
-    return(";".join(sorted(list(category_dict.keys()))))
+    return((series_id, m_d))
     
 
 
@@ -440,7 +561,7 @@ def manga_worker():
                 # Uses the soupify_and_pass function to load a url and pass it into the metadata_task function
                 metadata_results = soupify_and_pass(SERIES_METADATA_URL_FORMAT.format(manga_id), metadata_task)
                 with metadata_lock:
-                    metadata_list+=[metadata_results]
+                    metadata_list += [metadata_results]
             else:
                 # Uses the soupify_and_pass function to load a url and pass it into the issue_task function
                 issue_results = soupify_and_pass(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
