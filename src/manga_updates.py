@@ -5,17 +5,14 @@ THE NEW VERSION!
 
 proxy stuff inspired by: https://codelike.pro/create-a-crawler-with-rotating-ip-proxy-in-python/
 '''
-import operator
-import re
-import csv
-import random, requests
+
+import re, os
 
 # for threading
 import threading
 from queue import Queue
-import time
-from basic_functions import soupify_and_pass, PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find
+from basic_functions import PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
+    clean_find, get_string, save_progress, ninja_soupify_and_pass
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -23,9 +20,8 @@ from string import ascii_uppercase
 from itertools import combinations_with_replacement
 
 import pickle
-from functools import wraps # for the decorators
-from email.policy import default
-from posix import remove
+from functools import wraps, partial # for the decorators
+
 
 
 '''
@@ -33,6 +29,13 @@ TO-DO:
      
      * make the constants all good (ie series_metadata_url_format and NUMBER_OF_NONALPHA_MANGA_PAGES)
      * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
+     * To do: filter out one-shots
+             Status in Country of Origin:
+                Oneshot (Complete)  ie 112368
+     * Coin Rand ['Add']  is currently ['Coin Rand\xa0[', 'Add', ']'] ie 112368
+     * Multiple completion datees:
+            Oneshot (Complete)
+            2 Volumes (Complete) ie 46225
      
 '''
 
@@ -68,7 +71,6 @@ TO-DO:
 #     raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
          
             
-        
         
         
         
@@ -129,7 +131,7 @@ def get_next_sibling_tag(tag):
             next_thing = next_thing.next_sibling
     return(next_thing)
 
-
+# Outputs a normal string
 def get_strings(soup_obj, start_index=None, end_index=None):
     """
     Concatenates all the strings of an element into a single string. 
@@ -154,6 +156,7 @@ def soup_row_to_string_list(soup_row):
     """
     row_l = [get_strings(e) for e in soup_row if not isinstance(e, NavigableString)]
     return(row_l)
+
 
 def get_page_count(soup_obj):
     """
@@ -266,7 +269,7 @@ def get_all_categories(soup_obj):
     d={}
     categories = soup_obj.find_all('div',{'class','sCat'})
     for category in categories:
-        name=str("-".join(category.strings))
+        name = str("-".join(category.strings))
         if name in d:
             warn("Already a category named"+name+", overriding.")
         d[name] = get_next_sibling_tag(category)
@@ -303,25 +306,25 @@ def check_tag_is_category_decorator(function):
 @check_tag_is_category_decorator
 def clean_genre_category(soup_obj):
     """Returns list of strings of genre names"""
-    genres = [e.string for e in soup_obj.find_all("a")]
+    genres = [get_string(e) for e in soup_obj.find_all("a")]
     if not genres:
-        assert soup_obj.string.strip() == "N/A"
+        assert get_string(soup_obj).strip() == "N/A"
     genres = genres[:-1] # Drop the "see more thing")
     return(genres)
 @check_tag_is_category_decorator
 def clean_categories_category(soup_obj):
     """Returns a list of pairs: x = category string, y = final score"""
     categories = soup_obj.find_all("li")
-    categories[:] = [(e.string, int(e.a["title"].split()[1])) for e in categories]
+    categories[:] = [(get_string(e), int(e.a["title"].split()[1])) for e in categories]
     if not categories:
-        assert soup_obj.string.strip()=="N/A"
+        assert get_string(soup_obj).strip()=="N/A"
     return(categories)
 @check_tag_is_category_decorator
 def clean_list_stats_category(soup_obj):
     """Returns dicts of string->int"""
     d={}
     type_of_lists = [e.next_sibling.split()[0]  for e in soup_obj.find_all("b")]
-    stats = [int(e.string) for e in soup_obj.find_all("b")]
+    stats = [int(get_string(e)) for e in soup_obj.find_all("b")]
     for key, val in zip(type_of_lists,stats):
         d[key]=val
     assert len(type_of_lists) == len(stats)
@@ -392,7 +395,7 @@ def clean_rec_category(soup_obj):
     
     # How I take care of the "More..., [...] L,ess..." stuff
     unlikely_string = "XXZACHBURCHILLXX"
-    default_l = [e.strip() for e in soup_obj.strings]
+    default_l = [str(e).strip() for e in soup_obj.strings]
     excised = re.search("(?:(?:{0})+M(?:{0})*ore\.\.\.(?:{0})*)(.*)(?:({0})*L(?:{0})*ess\.\.\.(?:{0})*)".format(unlikely_string), 
                       unlikely_string.join(default_l))
     if excised:
@@ -454,8 +457,8 @@ def clean_related_series_category(soup_obj):
         if link.next_sibling.name == "br":
             classification = "(Misc.)"
         else:
-            classification = link.next_sibling.string.strip()
-        name = link.string.strip()
+            classification = get_string(link.next_sibling).strip()
+        name = get_string(link).strip()
         if classification in d.keys():
             mini_d = d[classification]
             mini_d["count"] += 1
@@ -474,8 +477,8 @@ def clean_default_category(soup_obj, remove_empty=False):
     A 'default' category information cleaner. 
     Just returns a list of stripped strings from all of the category content
     """
-    strings = [e.strip() for e in soup_obj.strings]
-    if remove_empty: return [e.strip() for e in strings if e != ""]
+    strings = [str(e).strip() for e in soup_obj.strings]
+    if remove_empty: return [str(e).strip() for e in strings if e != ""]
     else: return strings 
 @check_tag_is_category_decorator
 def get_series_id(soup_obj):
@@ -504,7 +507,7 @@ def metadata_task(soup):
     
     # the metadata dictionary
     m_d = {}
-    series_id = get_series_id(category_dict["Categories"])
+#     series_id = get_series_id(category_dict["Categories"])
     
     # Let's turn those categories into useable data
     m_d["genre"] = clean_genre_category(category_dict["Genre"])
@@ -543,52 +546,41 @@ def metadata_task(soup):
     except AssertionError as errorm:
         raise KeyboardInterrupt(str(errorm))
     
-    return((series_id, m_d))
+#     return((series_id, m_d))
+    return(m_d)
     
 
 
 
 # The worker thread pulls an item from the queue and processes it
 def manga_worker():
-    global update_info_list
-    global metadata_list
+    global Update_info_list
+    global Metadata_list
     global Error_list
     global manga_q
+    
     while True:
         manga_id, is_metadata, *page_number = manga_q.get()
         try:
             if is_metadata:
                 # Uses the soupify_and_pass function to load a url and pass it into the metadata_task function
-                metadata_results = soupify_and_pass(SERIES_METADATA_URL_FORMAT.format(manga_id), metadata_task)
-                with metadata_lock:
-                    metadata_list += [metadata_results]
+                metadata_results = nsap(SERIES_METADATA_URL_FORMAT.format(manga_id), metadata_task)
+                metadata_saver((manga_id, metadata_results))
+                print("GOOOD: ")
+                print(metadata_results)
+                Metadata_list += [manga_id]
             else:
                 # Uses the soupify_and_pass function to load a url and pass it into the issue_task function
-                issue_results = soupify_and_pass(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
+                issue_results = nsap(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
                 with update_info_lock:
-                    update_info_list+=issue_results
+                    Update_info_list+=issue_results
         except Exception as error_m:
             print("MANGA ID FUCK UP = {!s}".format(manga_id))
             Error_list+=[[str(error_m), manga_id, is_metadata]]
-#             raise
+            raise
         finally:
             manga_q.task_done()
         
-# def manga_worker():
-#     global update_info_list
-#     global metadata_list
-#     global Error_list
-#     while True:
-#         manga_id, is_metadata, *page_number = manga_q.get()
-#         if is_metadata:
-#             metadata_results = metadata_task(SERIES_METADATA_URL_FORMAT, manga_id)
-#             with metadata_lock:
-#                 metadata_list+=[metadata_results]
-#         else:
-#             issue_results = issue_task(ISSUE_URL_FORMAT, manga_id, page_number[0])
-#             with update_info_lock:
-#                 update_info_list+=issue_results
-#         manga_q.task_done()
 
 
 
@@ -632,7 +624,7 @@ def issue_task(url, manga_id, page_number):
                     manga_q.put([manga_id, False, i])
                     
         global EXPECTED_COL_NUM
-        return(get_issue_info_from_table(soup, manga_id, EXPECTED_COL_NUM))
+        return((manga_id, get_issue_info_from_table(soup, manga_id, EXPECTED_COL_NUM)))
     else: 
         return(None)
          
@@ -643,68 +635,99 @@ def issue_task(url, manga_id, page_number):
 
 
 def main():
-    global update_info_lock
-    global update_info_list
-    update_info_lock = threading.Lock()
-    update_info_list = []
+    global START_OVER
+    global METADATA_BOOL
     
-    global metadata_lock
-    global metadata_list
-    metadata_lock = threading.Lock()
-    metadata_list = []
+    global Update_info_list
+    Update_info_list = []
+    
+    global Metadata_list
+    Metadata_list = []
+    
+    global Error_list
+    Error_list = []
     
     global manga_q
-    
     manga_q = Queue()
-    for i in range(100): 
+    for i in range(NUM_THREADS): 
         t = threading.Thread(target=manga_worker)
         t.daemon = True
         t.start()
         
-    start = time.perf_counter() 
-    manga_ids=set(load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"))    
-    for m_id in list(manga_ids)[:1000]:
-#         manga_q.put([m_id, False, 1])
-        manga_q.put([m_id, True])
-        print(m_id)
+#     start = time.perf_counter() 
+    if START_OVER:
+        manga_ids = list(set(load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"))) 
+    else:
+        manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
+        try: Error_list = load_obj(MAIN_PATH + "errors")
+        except FileNotFoundError: print("Error file does not exist")
+    original_manga_ids = manga_ids
     
+    try:
+        while len(manga_ids) > 0:
+            if manga_q.qsize() < NUM_THREADS:
+                for i in range(NUM_THREADS):
+                    try: 
+                        m_id = manga_q.pop()
+                    except IndexError:
+                        break
+                    else:
+                        if METADATA_BOOL: manga_q.put([m_id, True]) # gets metadata
+                        else: manga_q.put([m_id, False, 1]) # gets issues
+    finally:
+        if METADATA_BOOL: close_up(Metadata_list, original_manga_ids)
+        else: close_up(Update_info_list, original_manga_ids)
+        metadata_saver.close()
+        issue_task_saver.close()
+        
+        print(len(set(Metadata_list)))
+        print(len(Error_list))
+        print(",".join([e[1] for e in Error_list]))
+        for e in Error_list:
+            print("--------------------")
+            print(e)
+        print("DONE")
+                
     manga_q.join()       # block until all tasks are done
-#     with open("/Users/zburchill/Desktop/delete2.csv","w",newline='',encoding='utf-8') as f:
-#         filewriter = csv.writer(f, delimiter=',', quotechar='"', quoting=csv.QUOTE_ALL)
-#         for thing in update_info_list:
-#             print(thing)
-#             filewriter.writerow(thing)
-# #         filewriter.writerows(update_info_list)
-#         print(len(update_info_list))
-    print(len(set(metadata_list)))
+    
+    print("Hey, looks like you're done!")
+    print(len(set(Metadata_list)))
     print(len(Error_list))
     print(",".join([e[1] for e in Error_list]))
+    for e in Error_list:
+        print("--------------------")
+        print(e)
     print("DONE")
+     
+    try:
+        metadata_saver.close()
+        issue_task_saver.close()
+    finally:
+        if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
+        else: close_up(Update_info_list, original_manga_ids, Error_list)
 
-
-
-
-
-# l=collect_valid_series()
-# save_obj(l, "valid_series_ids")
-# valid_series_ids = load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
-
-# 
-# s=ninja_soupify("https://www.mangaupdates.com/series.html?id=138324")
-# d=get_all_categories(s)
-# print(clean_list_stats_category(d["List Stats"]))
-# # print(list(d["List Stats"].strings))
-# # for e in d["List Stats"].strings:
-# #     if e[0]=="\n":
-# #         print("IXIX")
-# #     print(str(e)+"LLLLLLLL")
-# # print([int(e.string) for e in d["List Stats"].find_all("b")])
-# # stats = [e for e in d["List Stats"].find_all("b")]
-# # print([e.next_sibling.split()[0] for e in stats])
+def close_up(finished_ids, original_ids, errors):
+    global MAIN_PATH
+    weirdo_list = []
+    for e in finished_ids:
+        if e in original_ids:
+            original_ids.remove(e)
+        else: 
+            weirdo_list += [e]
+    if weirdo_list:
+        print("Oddly, these manga were supposed to have been logged, but weren't in the set of ids used:")
+        print(weirdo_list)
+    save_obj(original_ids, MAIN_PATH + "remaining")
+    save_obj(errors, MAIN_PATH + "errors")
+           
 
 
 def define_global_variables():
     # Global Constants
+    global MAIN_PATH
+    MAIN_PATH = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
+    global NUM_THREADS 
+    NUM_THREADS = 100
     global NUMBER_OF_NONALPHA_MANGA_PAGES # the number of pages of manga that don't begin with letters we have to scroll through 
     NUMBER_OF_NONALPHA_MANGA_PAGES = 4 
     global EXPECTED_COL_NUM
@@ -719,14 +742,24 @@ def define_global_variables():
     global Error_list # something to store all the errors
     Error_list = []
 
-
 if __name__ == "__main__":
+    global START_OVER
+    global METADATA_BOOL
+    
+    START_OVER = True
+    METADATA_BOOL = True # if False, it runs the issue_task
+
     define_global_variables()
+    global MAIN_PATH
+    
+    metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=2)
+    issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=2)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
+    nsap = partial(ninja_soupify_and_pass, ninja_soupify)
     
 #     metadata_task(SERIES_METADATA_URL_FORMAT,16)
     print("CCCCCCCCCCCCCC")
-    print(ninja_soupify("https://google.com"))
+#     print(ninja_soupify("https://google.com"))
     
     # clean_status_category = clean_category_default
 #     print("ABABABABA")
@@ -740,4 +773,4 @@ if __name__ == "__main__":
 #     print("XXXX")
 #     print(clean_status_category(d["Status in Country of Origin"]))
 #     print(d.keys())
-#     main()
+    main()
