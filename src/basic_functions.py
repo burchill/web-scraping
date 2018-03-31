@@ -81,6 +81,7 @@ class save_progress(object):
         
     def close(self):
         self.sync_dict()
+        print("THE SAVED PROGRESS HAS {!s} ENTRIES---------------".format(len(self._shelf.items())))
         self._shelf.close()
     
     @staticmethod

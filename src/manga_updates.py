@@ -27,7 +27,7 @@ from functools import wraps, partial # for the decorators
 '''
 TO-DO:
      
-     * make the constants all good (ie series_metadata_url_format and NUMBER_OF_NONALPHA_MANGA_PAGES)
+     * make it so that when it's not starting a fresh, it gets only the ones that haven't been done
      * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
      * To do: filter out one-shots
              Status in Country of Origin:
@@ -480,6 +480,7 @@ def clean_default_category(soup_obj, remove_empty=False):
     strings = [str(e).strip() for e in soup_obj.strings]
     if remove_empty: return [str(e).strip() for e in strings if e != ""]
     else: return strings 
+# Unused:
 @check_tag_is_category_decorator
 def get_series_id(soup_obj):
     """ Requires the "category" category as the soup_obj """
@@ -501,14 +502,9 @@ def get_series_id(soup_obj):
 
 def metadata_task(soup):
     # Get the categories
-    category_dict = get_all_categories(soup)
-#     image_cat_name = [e for e in category_dict.keys() if "Image" in e]
-#     bleh = category_dict.pop(image_cat_name[0])
-    
+    category_dict = get_all_categories(soup)    
     # the metadata dictionary
     m_d = {}
-#     series_id = get_series_id(category_dict["Categories"])
-    
     # Let's turn those categories into useable data
     m_d["genre"] = clean_genre_category(category_dict["Genre"])
     m_d["categories"] = clean_categories_category(category_dict["Categories"])
@@ -535,18 +531,15 @@ def metadata_task(soup):
     m_d["serialized_in"] = clean_default_category(category_dict["Serialized In (magazine)"])
     m_d["licensed"] = clean_default_category(category_dict["Licensed (in English)"])
     m_d["english_pub"] = clean_default_category(category_dict["English Publisher"])    
-    
     # ----------- Not implemented:
     # activity_stats
     # getting author information, such as gender/blood type
     # image (don't see why this is useful)
-    
     try:
         m_d["list_stats"] = clean_list_stats_category(category_dict["List Stats"])
     except AssertionError as errorm:
         raise KeyboardInterrupt(str(errorm))
-    
-#     return((series_id, m_d))
+
     return(m_d)
     
 
@@ -668,14 +661,15 @@ def main():
             if manga_q.qsize() < NUM_THREADS:
                 for i in range(NUM_THREADS):
                     try: 
-                        m_id = manga_q.pop()
+                        m_id = manga_ids.pop()
                     except IndexError:
                         break
                     else:
                         if METADATA_BOOL: manga_q.put([m_id, True]) # gets metadata
                         else: manga_q.put([m_id, False, 1]) # gets issues
     finally:
-        if METADATA_BOOL: close_up(Metadata_list, original_manga_ids)
+        print("Closing!")
+        if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
         else: close_up(Update_info_list, original_manga_ids)
         metadata_saver.close()
         issue_task_saver.close()
@@ -698,7 +692,6 @@ def main():
         print("--------------------")
         print(e)
     print("DONE")
-     
     try:
         metadata_saver.close()
         issue_task_saver.close()
@@ -706,9 +699,14 @@ def main():
         if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
         else: close_up(Update_info_list, original_manga_ids, Error_list)
 
+
 def close_up(finished_ids, original_ids, errors):
     global MAIN_PATH
+    original_ids = set(original_ids)
     weirdo_list = []
+    if len(set(finished_ids)) != len(finished_ids):
+        print("There are ids that have been processed more than once!")
+    finished_ids = set(finished_ids)
     for e in finished_ids:
         if e in original_ids:
             original_ids.remove(e)
@@ -738,7 +736,7 @@ def define_global_variables():
     ISSUE_URL_FORMAT="https://www.mangaupdates.com/releases.html?page={1}&search={0}&stype=series&perpage=100"
     global SWITCH_PROXIES_AFTER_N_REQUESTS # make really really big if you don't want to switch
     SWITCH_PROXIES_AFTER_N_REQUESTS = 10
-    
+    # Redundant?
     global Error_list # something to store all the errors
     Error_list = []
 
@@ -752,25 +750,11 @@ if __name__ == "__main__":
     define_global_variables()
     global MAIN_PATH
     
-    metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=2)
-    issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=2)
+    metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
+    issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
     
-#     metadata_task(SERIES_METADATA_URL_FORMAT,16)
     print("CCCCCCCCCCCCCC")
-#     print(ninja_soupify("https://google.com"))
-    
-    # clean_status_category = clean_category_default
-#     print("ABABABABA")
-#     s = ninja_soupify("https://www.mangaupdates.com/series.html?id=3920")
-#     print("ABABABABA")
-#     d = get_all_categories(s)
-#     
-#     # print(get_strings(d["User Rating"]))
-#     print(d["User Rating"].next_element.split())
-#     print(d["User Rating"].next_element.next_element.next_element.next_element.string)
-#     print("XXXX")
-#     print(clean_status_category(d["Status in Country of Origin"]))
-#     print(d.keys())
+
     main()
