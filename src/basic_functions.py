@@ -4,7 +4,7 @@ Created on Mar 16, 2018
 @author: zburchill
 '''
 import urllib.parse
-import logging, os, random, functools
+import logging, os, random, functools, shelve, threading
 import io # for loading images
 from warnings import warn
 
@@ -28,8 +28,72 @@ def remove_duplicate_elements(l):
     return (list(set(l)))
 
 
-# ------------------------------ General loading / internet functions ------------------------------ #
+# ------------------------------ General saving functions ------------------------------------------ #
+class save_progress(object):
+    """ Caches the key-value output of a function call, saving the whole thing to file every `n` calls,
+    and then clearing out the RAM-intensive part of the cache.
+    Uses `shelve` to store stuff. """
+    
+    def __init__(self, filename, f, save_after_n, make_new=False):
+        self._f = f
+        self._save_after = save_after_n
+        if make_new:
+            os.remove(filename)
+        self._shelf = shelve.open(filename)
+        self.filename = filename
+        
+        # Not affected by args:
+        self._writing_lock = threading.Lock()
+        self._data_lock = threading.Lock() # don't need it
+        self._n = 0
+        self.data = {}
 
+    def __call__(self, *args, **kwargs):
+        # If it needs to sync/save
+        if self._n == self._save_after:
+            self.sync_dict()
+            self._n = 0
+        with self._data_lock:
+            print(self._f(*args, **kwargs))
+            k, v = self._f(*args, **kwargs)
+            self.data[k] = v
+        self._n += 1
+            
+    def sync_dict(self):
+        """ Appends the dict cache to the shelf, saves the shelf, 
+        and clears the dict cache """
+        with self._writing_lock:
+            with self._data_lock:
+                # Sync shelf
+                self.shelve_dict(self.data)
+                self._shelf.sync()
+                # Empty out dict
+                del self.data
+                self.data = {}
+        
+    def shelve_dict(self, d):
+        """ Adds all items in the dict cache to the shelf """
+        for k, v in d.items():
+            try:
+                self._shelf[k] = v
+            except AttributeError as error_m:
+                warn("{0} {1} has: {2}".format(k,v,error_m))
+        
+    def close(self):
+        self.sync_dict()
+        self._shelf.close()
+    
+    @staticmethod
+    def identity(e):
+        """ for functions that already output a key value tuple """
+        return(e)
+
+# saver_1 = save_progress("/Users/zburchill/Desktop/delete", save_progress.identity, 10)
+# saver_1(("key", "value1")) # etc
+
+
+
+# ------------------------------ General loading / internet functions ------------------------------ #
 
 # A generic custom exception so that I know when a failed to load properly or image failed to `Image.save()`
 class PageScrapeException(Exception):
@@ -86,7 +150,6 @@ def load_image(image_url, *args, **kwargs):
     im = Image.open(image_file)
     return(im)
 
-
 # Note, doesn't let you pass additional args to `soupify`
 def soupify_and_pass(url, f, *args, **kwargs):
     """This function soupifies a url, and passes it in as the first argument of a function.
@@ -94,6 +157,12 @@ def soupify_and_pass(url, f, *args, **kwargs):
     soup = soupify(url)
     return(f(soup, *args, **kwargs))
     
+# Note, doesn't let you pass additional args to `soupify`
+def ninja_soupify_and_pass(ninja_soup_f, url, f, *args, **kwargs):
+    """This function does a function on a url, and passes it in as the first argument of another function.
+    Note that it will not pass any extra arguments in to the `soupify` function as it is currently."""
+    soup = ninja_soup_f(url)
+    return(f(soup, *args, **kwargs))
 
 # ---------------------------------- soup functions ---------------------------------------- #
 
@@ -240,7 +309,7 @@ class ninja_soupify_simpler(object):
                 r = soupify(url, proxies = proxy, **kwargs)
                 return(r)
             # If the proxy doesn't work:
-            except (requests.exceptions.SSLError, requests.exceptions.ProxyError) as err:
+            except (requests.exceptions.SSLError, requests.exceptions.ProxyError, requests.exceptions.ConnectionError) as err:
                 warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d = self.proxies[self.proxy_index], error_m=err))
                 del self.proxies[self.proxy_index]
                 dead_proxy_count += 1
