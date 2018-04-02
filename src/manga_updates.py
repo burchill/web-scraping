@@ -41,7 +41,7 @@ TO-DO:
          eg ['Betsucomi','(Shogakukan)', ''] 13581
              also strip ending (they can have multiple serializations though
      * get rid of extra blanks in "English pubs"
-         eg ["Harlequin K.K.","","SoftBank Creative",""] 32093
+         eg ['Harlequin K.K.', '', 'SoftBank Creative', '', ''] 32093
      
 '''
 
@@ -476,6 +476,25 @@ def clean_related_series_category(soup_obj):
             mini_d["list"] = [(name, series_id)]
             d[classification] = mini_d
     return d
+
+@check_tag_is_category_decorator
+def clean_authors_category(soup_obj):
+    """
+    Returns a list of strings that represents the authors/artists.
+    If an author/artist hasn't been added to the list of authors, there's an "[Add]" that appears after their name, and
+    this cleaning function is supposed to remove that.
+    """
+    strings = [str(e).strip() for e in soup_obj.strings if e != ""]
+    i=0
+    while i < len(strings):
+        if strings[i] == "Add":
+            # HAAAACK
+            strings[i-1] = strings[i-1][:-2] # removes the ' ['
+            del strings[i+1] # removes the ']'
+            del strings[i] # removes the 'Add'
+        i += 1
+    return(strings)
+
 # This is for any information you want to process later
 @check_tag_is_category_decorator
 def clean_default_category(soup_obj, remove_empty=False):
@@ -518,6 +537,8 @@ def metadata_task(soup):
     m_d["user_ratings"] = clean_user_rating_category(category_dict["User Rating"])
     m_d["was_anime"] = clean_anime_category(category_dict["Anime Start/End Chapter"])
     m_d["status"] = clean_status_category(category_dict["Status in Country of Origin"])
+    m_d["authors"] = clean_authors_category(category_dict["Author(s)"])
+    m_d["artists"] = clean_authors_category(category_dict["Artist(s)"])
     recs = clean_rec_category(category_dict["Recommendations"])
     m_d["rec_ids"] = recs["ids"]
     m_d["rec_names"] = recs["names"]
@@ -530,8 +551,6 @@ def metadata_task(soup):
     m_d["completely_scanlated"] = clean_default_category(category_dict["Completely Scanlated?"])
     m_d["last_updated"] = clean_default_category(category_dict["Last Updated"])
     m_d["category_recs"] = clean_default_category(category_dict["Category Recommendations"])
-    m_d["authors"] = clean_default_category(category_dict["Author(s)"], remove_empty=True)
-    m_d["artists"] = clean_default_category(category_dict["Artist(s)"], remove_empty=True)
     m_d["year"] = clean_default_category(category_dict["Year"], remove_empty=True)
     m_d["original_pub"] = clean_default_category(category_dict["Original Publisher"], remove_empty=True)
     m_d["serialized_in"] = clean_default_category(category_dict["Serialized In (magazine)"])
