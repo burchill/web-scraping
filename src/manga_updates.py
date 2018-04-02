@@ -29,13 +29,19 @@ TO-DO:
      
      * make it so that when it's not starting a fresh, it gets only the ones that haven't been done
      * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
-     * To do: filter out one-shots
+     
+     * filter out one-shots
              Status in Country of Origin:
                 Oneshot (Complete)  ie 112368
      * Coin Rand ['Add']  is currently ['Coin Rand\xa0[', 'Add', ']'] ie 112368
      * Multiple completion datees:
             Oneshot (Complete)
             2 Volumes (Complete) ie 46225
+     * get rid of what's in parentheses for "serialized_in"
+         eg ['Betsucomi','(Shogakukan)', ''] 13581
+             also strip ending (they can have multiple serializations though
+     * get rid of extra blanks in "English pubs"
+         eg ["Harlequin K.K.","","SoftBank Creative",""] 32093
      
 '''
 
