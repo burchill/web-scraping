@@ -47,6 +47,8 @@ class save_progress(object):
         self._data_lock = threading.Lock() # don't need it
         self._n = 0
         self.data = {}
+        self._c = 0 # For tracking stuff rulllll good
+        self._c2 = 0 # For tracking stuff rulllll good
 
     def __call__(self, *args, **kwargs):
         # If it needs to sync/save
@@ -56,6 +58,7 @@ class save_progress(object):
         with self._data_lock:
             print(self._f(*args, **kwargs))
             k, v = self._f(*args, **kwargs)
+            self._c +=1
             self.data[k] = v
         self._n += 1
             
@@ -74,14 +77,23 @@ class save_progress(object):
     def shelve_dict(self, d):
         """ Adds all items in the dict cache to the shelf """
         for k, v in d.items():
+            self._c2 += 1
+            if k in self._shelf:
+                print("MMMMMMMMMMMMMMMMMMM")
+                print("{0} {1}".format(k,v))
             try:
                 self._shelf[k] = v
             except AttributeError as error_m:
-                warn("{0} {1} has: {2}".format(k,v,error_m))
+                print("HHHHHHHHHHHHHHHHHH")
+                print("{0} {1} has: {2}".format(k,v,error_m))
         
     def close(self):
+        print("BBBBBBBUUUUUUUUT: "+str(self._c))
+        print("BBBBBBBUUUUUUUUT: "+str(self._c2))
         self.sync_dict()
         print("THE SAVED PROGRESS HAS {!s} ENTRIES---------------".format(len(self._shelf.items())))
+        print("BBBBBBBUUUUUUUUT: "+str(self._c))
+        print("BBBBBBBUUUUUUUUT: "+str(self._c2))
         self._shelf.close()
     
     @staticmethod
@@ -136,7 +148,7 @@ def try_to_urlopen(url_t, timeout_sec=30, n_attempts=2, new_header=True,
                 raise
         except requests.exceptions.Timeout:
             attempts += 1
-            warning_string = "Url '{url!s}' timed out. {n!s} tries until skipping".format(url=url_t, n=n_attempts-attempts)
+            warning_string = "Url '{url!s}' timed out. {n!s} tries until skipping".format(url=url_t, n=n_attempts-attempts+1)
             logging.warning(warning_string)
     if attempts > n_attempts:
         raise requests.exceptions.Timeout("URL '{url!s}' timed out {n!s} times, at {sec!s} sec. each try.".format(url=url_t, n=n_attempts, sec=timeout_sec))
