@@ -12,7 +12,8 @@ import re, os
 import threading
 from queue import Queue
 from basic_functions import PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass
+    clean_find, get_string, save_progress, ninja_soupify_and_pass,\
+    clean_find_all
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -45,8 +46,7 @@ TO-DO:
      
 '''
 
-# 
-#     
+
 # def random_proxy():
 #     global Proxies_list
 #     return random.randint(0, len(Proxies_list) - 1)
@@ -138,7 +138,7 @@ def get_next_sibling_tag(tag):
     return(next_thing)
 
 # Outputs a normal string
-def get_strings(soup_obj, start_index=None, end_index=None):
+def get_full_string(soup_obj, start_index=None, end_index=None):
     """
     Concatenates all the strings of an element into a single string. 
     
@@ -147,6 +147,30 @@ def get_strings(soup_obj, start_index=None, end_index=None):
     string_list = list(soup_obj.strings)
     string_temp = "".join(string_list[start_index:end_index])
     return(string_temp)
+
+def get_strings(soup_obj, remove_empty=False):
+    """
+    Returns a list of all the strings in a soup object, with the option to remove empty strings
+    """
+    strings = [str(e).strip() for e in soup_obj.strings]
+    if remove_empty: return [str(e).strip() for e in strings if e != ""]
+    else: return strings 
+    
+def break_strings_by_line(soup_obj):
+    """ 
+    Returns all the strings in a soup object, concatenated by lines
+    """
+    big_l = []
+    temp_l = []
+    for child in soup_obj.children:
+        if child.name == "br":
+            if temp_l:
+                big_l+=["".join(temp_l)]
+                temp_l = []
+        else:
+            if get_string(child).strip(): temp_l += [ get_string(child) ]
+    if temp_l: big_l+= ["".join(temp_l)]
+    return(big_l)
 
 def get_soup_row_list(soup_obj):
     """
@@ -160,7 +184,7 @@ def soup_row_to_string_list(soup_row):
     """
     Turns the values in row of updates (bs4 element) into a list of strings if they aren't already
     """
-    row_l = [get_strings(e) for e in soup_row if not isinstance(e, NavigableString)]
+    row_l = [get_full_string(e) for e in soup_row if not isinstance(e, NavigableString)]
     return(row_l)
 
 
@@ -352,14 +376,14 @@ def clean_user_rating_category(soup_obj):
         - The Bayesian average rating <float>
         - The number of votes <int>
         - The distribution of votes <a dict of string keys and int values>"""
-    if get_strings(soup_obj).strip() == "N/A":
+    if get_full_string(soup_obj).strip() == "N/A":
         return("N/A")
     first_line=soup_obj.next_element.split()
     reg_avg=float(first_line[1])
     num_votes=int(first_line[4][1:])
     bayesian_avg = float(soup_obj.next_element.next_element.next_element.next_element.string.strip()) # Oh lawdy, there's a better way, im sure
     d={}
-    scores_n_shit = [e for e in get_strings(soup_obj).split("\n")[1:] if e != ""]
+    scores_n_shit = [e for e in get_full_string(soup_obj).split("\n")[1:] if e != ""]
     for score, vote_string in list(zip(scores_n_shit,scores_n_shit[1:]))[::2]:
         num_votes_per=int(vote_string.split("(")[1].split()[0])
         d[score]=num_votes_per
@@ -376,21 +400,35 @@ def clean_anime_category(soup_obj):
     """
     Returns `True`/`False` if there was an anime.
     """
-    return(get_strings(soup_obj).strip() != "N/A")
+    return(get_full_string(soup_obj).strip() != "N/A")
 @check_tag_is_category_decorator
 def clean_status_category(soup_obj):
     """ 
-    Returns the status of a manga.
-    Generally something like "Ongoing" "Complete" or "On hiatus".
-    
-    It basically gets whatever is in the parentheses from text that is like: 
-    "32 Volumes (On hiatus)".  Returns `False` if there are no parentheses.
+    Returns the status of a manga. Because stuff is complicated, it returns a dictionary.
+    All oneshots go under the key "oneshot", everything else goes into a list with the key "regulars",
+    where each item in the list is a tuple, the second item being an easier status like 
+    "(Ongoing)" "(Complete)" or "(On hiatus)", etc. If there isn't a value in parentheses, the second tuple 
+    element is blank.
     """
-    m = re.search("\(.*\)", get_strings(soup_obj))
-    if m:
-        return(m.group(0)[1:-1])
-    else:
-        return(False)
+    stati = get_strings(soup_obj, remove_empty=True)
+    d = {}
+    for status in stati:
+        if "oneshot" in status.lower(): # Oneshots by default are completed, so who cares about them
+            d["oneshot"] = status
+        else:
+            # Make an empty list you can add to
+            if "regulars" not in d:
+                d["regulars"]=[]
+            chopper = re.search("(.*)(\(.+\))", status)
+            if chopper:
+                tupes = chopper.groups()
+                # Really, there's no reason to remove the parens
+#                 if tupes[1]:
+#                     tupes[1] = tupes[1][1:-1] # remove parens
+                d["regulars"]+=[tupes]
+            else: # ie, if it doesn't have parens
+                d["regulars"]+=[(status,"")]
+    return(d)
 @check_tag_is_category_decorator
 def clean_rec_category(soup_obj):
     """
@@ -413,31 +451,8 @@ def clean_rec_category(soup_obj):
     
     return({"ids": no_dupe_ids, "names": no_dupe_names})
 
-@check_tag_is_category_decorator
-def clean_activity_stats_category(soup_obj):
-    
-    pass
-
-    
-#     for i in range(0,len(default_l)-3):
-#         print("===============")
-#         print(default_l[i])
-#         print("--------------")
-#         if default_l[i] == "M" and default_l[i+1] == "ore...":
-#             print("ZZZZZZZZ")
-#             j = i+2
-#             print(default_l[j])
-#             while default_l[j] == "": 
-#                 print("looop")
-#                 j+=1
-#                 print(default_l[j])
-#                 
-#             good_l = default_l[j:]
-#             assert len(good_l) > 1
-#             k = j+1
-#             while k < len(default_l)-1 and 
-#             return(good_l) 
-
+# HAAAAAAAAAAAACK! If the related series are a mix of links and plaintext, it ignores the plaintext ones
+# HAAAAAAAAACK! Also, doesn't give a shit about plaintext
 @check_tag_is_category_decorator
 def clean_related_series_category(soup_obj):
     """
@@ -447,23 +462,45 @@ def clean_related_series_category(soup_obj):
             "count": how many series fall under this relation
             "list": a list of tuples of (name, series id)
     """
-    print(soup_obj)
+#     for child in soup_obj.descendants:
+#         print("-------")
+#         print(child)
+#     for child in soup_obj.children:
+#         print("--XXXXXXX-----")
+#         print(child)
+#         print(child.name)
+    
+
+    
+    print(break_strings_by_line(soup_obj))
+    
+    
+    
+    # Find all the links
     links = soup_obj.find_all("a")
+    # If there are no links, it's all just plaintext
     if not links:
-        if get_strings(soup_obj).strip() == "N/A":
+        # if it's just N/A return that
+        if get_full_string(soup_obj).strip() == "N/A":
             return("N/A")
         else:
-            l = clean_default_category(soup_obj, remove_empty=True)
+            #If there are non-link entries, classify them all as misc, and be done with it
+            # HAAAACK
+            l = get_strings(soup_obj, remove_empty=True)
             c = len(l)
             return({"(Misc.)": {"count": c, "list": [(e, None) for e in l]}})
     d = {}
     for link in links:
+        # Get the series id from the link
         series_id = get_id_from_url(link.get("href"))
         assert series_id != None
-        if link.next_sibling.name == "br":
+        # If the next item is 
+#         if link.next_sibling.name == "br":
+#             classification = "(Misc.)"
+#         else:
+        classification = get_string(link.next_sibling).strip()
+        if not classification or classification == "None":
             classification = "(Misc.)"
-        else:
-            classification = get_string(link.next_sibling).strip()
         name = get_string(link).strip()
         if classification in d.keys():
             mini_d = d[classification]
@@ -493,7 +530,7 @@ def clean_authors_category(soup_obj):
             del strings[i+1] # removes the ']'
             del strings[i] # removes the 'Add'
         i += 1
-    return(strings)
+    return([e for e in strings if e != ""])
 
 # This is for any information you want to process later
 @check_tag_is_category_decorator
@@ -502,9 +539,7 @@ def clean_default_category(soup_obj, remove_empty=False):
     A 'default' category information cleaner. 
     Just returns a list of stripped strings from all of the category content
     """
-    strings = [str(e).strip() for e in soup_obj.strings]
-    if remove_empty: return [str(e).strip() for e in strings if e != ""]
-    else: return strings 
+    return(get_strings(soup_obj, remove_empty))
 # Unused:
 @check_tag_is_category_decorator
 def get_series_id(soup_obj):
@@ -545,17 +580,17 @@ def metadata_task(soup):
     m_d["related_series"] = clean_related_series_category(category_dict["Related Series"])
     
     # ----------- 'Defaultly' cleaned categories:
+    m_d["year"] = clean_default_category(category_dict["Year"], remove_empty=True)
+    m_d["original_pub"] = clean_default_category(category_dict["Original Publisher"], remove_empty=True)
+    m_d["english_pub"] = clean_default_category(category_dict["English Publisher"], remove_empty=True) 
     m_d["description"] = clean_default_category(category_dict["Description"])
     m_d["type"] = clean_default_category(category_dict["Type"])
     m_d["associated_names"] = clean_default_category(category_dict["Associated Names"])
     m_d["completely_scanlated"] = clean_default_category(category_dict["Completely Scanlated?"])
     m_d["last_updated"] = clean_default_category(category_dict["Last Updated"])
     m_d["category_recs"] = clean_default_category(category_dict["Category Recommendations"])
-    m_d["year"] = clean_default_category(category_dict["Year"], remove_empty=True)
-    m_d["original_pub"] = clean_default_category(category_dict["Original Publisher"], remove_empty=True)
     m_d["serialized_in"] = clean_default_category(category_dict["Serialized In (magazine)"])
-    m_d["licensed"] = clean_default_category(category_dict["Licensed (in English)"])
-    m_d["english_pub"] = clean_default_category(category_dict["English Publisher"])    
+    m_d["licensed"] = clean_default_category(category_dict["Licensed (in English)"])   
     # ----------- Not implemented:
     # activity_stats
     # getting author information, such as gender/blood type
