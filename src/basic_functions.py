@@ -21,7 +21,10 @@ import requests # http://docs.python-requests.org/en/latest/user/install/#instal
 # Turns navigable strings to normal ones
 def get_string(soup_element):
     """ returns a bs4 element's NavigableString as a normal one """
-    return(str(soup_element.string))
+    if soup_element.string:
+        return(str(soup_element.string))
+    else:
+        return("")
 
 def remove_duplicate_elements(l):
     """ Right now, just `list(set(l))` """
@@ -322,7 +325,7 @@ class ninja_soupify_simpler(object):
                 r = soupify(url, proxies = proxy, **kwargs)
                 return(r)
             # If the proxy doesn't work:
-            except (requests.exceptions.SSLError, requests.exceptions.ProxyError, requests.exceptions.ConnectionError) as err:
+            except (requests.exceptions.SSLError, requests.exceptions.ProxyError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
                 warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d = self.proxies[self.proxy_index], error_m=err))
                 del self.proxies[self.proxy_index]
                 dead_proxy_count += 1
