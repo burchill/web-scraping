@@ -637,15 +637,18 @@ def manga_worker():
             if is_metadata:
                 # Uses the soupify_and_pass function to load a url and pass it into the metadata_task function
                 metadata_results = nsap(SERIES_METADATA_URL_FORMAT.format(manga_id), metadata_task)
-                metadata_saver((manga_id, metadata_results))
-                print("GOOOD: ")
-                print(metadata_results)
+                if metadata_results:
+                    metadata_saver((manga_id, metadata_results))
+                    print("GOOOD: ")
+                    print(metadata_results)
                 Metadata_list += [manga_id]
             else:
                 # Uses the soupify_and_pass function to load a url and pass it into the issue_task function
                 issue_results = nsap(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
-                # importantly, append the page number to the ID in a separable way
-                issue_task_saver(("{0}_page_{1}".format(manga_id, page_number[0]), issue_results))
+                # If there are results, add them
+                if issue_results:
+                    # importantly, append the page number to the ID in a separable way
+                    issue_task_saver(("{0}_page_{1}".format(manga_id, page_number[0]), issue_results))
                 Issue_info_list += [manga_id]
         except Exception as error_m:
             print("MANGA ID FUCK UP = {!s}".format(manga_id))
@@ -695,6 +698,9 @@ def issue_task(soup, manga_id, page_number):
             # see how many other pages there are...
             max_page = get_page_count(soup)
             if max_page:
+                global MAXPAGES
+                if max_page > MAXPAGES: # Sometimes it gets the wrong pages
+                    return(None) # Return nothing and let this motherfucker die
                 # and put them on the queue too
                 for i in range(2, max_page+1):
                     manga_q.put([manga_id, False, i])
@@ -864,7 +870,8 @@ def define_global_variables():
     Error_list = []
     global BAD_IDS
     BAD_IDS = ["132433", "134159"] # I don't know what the fuck this does, but they're not real series. check for example: https://www.mangaupdates.com/releases.html?search=134159&stype=series&perpage=100
-
+    global MAXPAGES
+    MAXPAGES = 100 # There should never be more than 10,000 updates for any one series
 
 
 
