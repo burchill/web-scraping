@@ -718,6 +718,7 @@ def main():
     global START_OVER
     global METADATA_BOOL
     global LIST_OF_IDS_TO_USE
+    global BAD_IDS
     
     global Issue_info_list
     Issue_info_list = []
@@ -748,6 +749,9 @@ def main():
             try: Error_list = load_obj(MAIN_PATH + "errors")
             except FileNotFoundError: 
                 warn("The file containing the errors does not exist")
+                
+    # filter out the bad ids first
+    manga_ids = [e for e in manga_ids if e not in BAD_IDS]           
     original_manga_ids = manga_ids
     
     # This variable checks and sees if the next loop exited naturally
@@ -858,6 +862,8 @@ def define_global_variables():
     # Redundant?
     global Error_list # something to store all the errors
     Error_list = []
+    global BAD_IDS
+    BAD_IDS = ["132433", "134159"] # I don't know what the fuck this does, but they're not real series. check for example: https://www.mangaupdates.com/releases.html?search=134159&stype=series&perpage=100
 
 
 
