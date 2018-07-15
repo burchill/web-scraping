@@ -704,6 +704,7 @@ def issue_task(soup, manga_id, page_number):
 
 
 def main():
+    # Declare some global variables only for main
     global START_OVER
     global METADATA_BOOL
     
@@ -716,65 +717,86 @@ def main():
     global Error_list
     Error_list = []
     
+    # Make a global queue
     global manga_q
     manga_q = Queue()
     for i in range(NUM_THREADS): 
         t = threading.Thread(target=manga_worker)
         t.daemon = True
         t.start()
-        
-#     start = time.perf_counter() 
+    
+    # If you want to start over from scratch, load the valid series ids
     if START_OVER:
         manga_ids = list(set(load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"))) 
-    else:
+    else: # otherwise, try to load the remaining ones
         manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
         try: Error_list = load_obj(MAIN_PATH + "errors")
         except FileNotFoundError: 
             warn("The file containing the errors does not exist")
     original_manga_ids = manga_ids
     
+    # This variable checks and sees if the next loop exited naturally
+    ended_correctly = True
+    
+    # This is the loop that keeps all the workers going and stuff
     try:
         while len(manga_ids) > 0:
+            # If the queue isn't being fully utilized...
             if manga_q.qsize() < NUM_THREADS:
+                # Get a manga_id...
                 for i in range(NUM_THREADS):
                     try: 
                         m_id = manga_ids.pop()
                     except IndexError:
                         break
                     else:
+                        # and add it to the queue
                         if METADATA_BOOL: manga_q.put([m_id, True]) # gets metadata
                         else: manga_q.put([m_id, False, 1]) # gets issues
+    except Exception as e:
+        ended_correctly = False
+        raise
+    # If it ends or the user wants to end where they are, this closes stuff out:
     finally:
         print("Closing!")
-        if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
-        else: close_up(Update_info_list, original_manga_ids)
-        metadata_saver.close()
-        issue_task_saver.close()
         
-        print(len(set(Metadata_list)))
-        print(len(Error_list))
-        print(",".join([e[1] for e in Error_list]))
-        for e in Error_list:
-            print("--------------------")
-            print(e)
-        print("DONE")
+        if ended_correctly:
+            print("Looks like all the workers got added correctly!")
+            print("We're just going to wait for the queue to get done now!")
+            print("If you want to not wait for all the workers to stop, just do a keyboard interrupt.")
+            
+            try:
+                manga_q.join()       # block until all tasks are done
                 
-    manga_q.join()       # block until all tasks are done
-    
-    print("Hey, looks like you're done!")
-    print(len(set(Metadata_list)))
-    print(len(Error_list))
-    print(",".join([e[1] for e in Error_list]))
-    for e in Error_list:
-        print("--------------------")
-        print(e)
-    print("DONE")
-    try:
-        metadata_saver.close()
-        issue_task_saver.close()
-    finally:
-        if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
-        else: close_up(Update_info_list, original_manga_ids, Error_list)
+            finally:
+                if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
+                else: close_up(Update_info_list, original_manga_ids)
+                metadata_saver.close()
+                issue_task_saver.close()
+                
+                # Print information
+                print(len(set(Metadata_list)))
+                print(len(Error_list))
+                print(",".join([e[1] for e in Error_list]))
+                for e in Error_list:
+                    print("--------------------")
+                    print(e)
+                print("DONE")
+                
+        else: # if it didn't end correctly
+            if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
+            else: close_up(Update_info_list, original_manga_ids)
+            metadata_saver.close()
+            issue_task_saver.close()
+            
+            # Print information
+            print(len(set(Metadata_list)))
+            print(len(Error_list))
+            print(",".join([e[1] for e in Error_list]))
+            for e in Error_list:
+                print("--------------------")
+                print(e)
+            print("DONE")
 
 
 def close_up(finished_ids, original_ids, errors):
@@ -805,7 +827,7 @@ def define_global_variables():
     NUM_THREADS = 100
     global NUMBER_OF_NONALPHA_MANGA_PAGES # the number of pages of manga that don't begin with letters we have to scroll through 
     NUMBER_OF_NONALPHA_MANGA_PAGES = 4 
-    global EXPECTED_COL_NUM
+    global EXPECTED_COL_NUM # number of columns in the issues tables
     EXPECTED_COL_NUM = 5
     global SERIES_METADATA_URL_FORMAT
     SERIES_METADATA_URL_FORMAT="https://www.mangaupdates.com/series.html?id={0}"
@@ -827,13 +849,16 @@ if __name__ == "__main__":
     define_global_variables()
     global MAIN_PATH
     
-    
-
-    metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
-    issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
+     
+#     metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
+#     issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
      
     print("CCCCCCCCCCCCCC")
  
-    main()
+#     main()
+
+
+
+
