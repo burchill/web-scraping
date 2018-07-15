@@ -22,7 +22,7 @@ from itertools import combinations_with_replacement
 import pickle
 from functools import wraps, partial # for the decorators
 
-
+from time import sleep # ehhh
 
 '''
 TO-DO:
@@ -766,6 +766,9 @@ def main():
             print("If you want to not wait for all the workers to stop, just do a keyboard interrupt.")
             
             try:
+                while (manga_q.qsize() > 0):
+                    print("There are still {0} worker threads in the queue!".format(manga_q.qsize()))
+                    sleep(30)
                 manga_q.join()       # block until all tasks are done
                 
             finally:
