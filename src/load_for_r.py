@@ -30,12 +30,13 @@ def load_dicts(db_path, id_path):
     print(len(list_of_dicts))
     return(list_of_dicts)
 
-
 # Since I'm saving the issue information a bit differently, I'm just making this a separate function
-
 def load_issue_dicts(db_path, id_path, 
                      page_num_suffix = "_pagenum",
                      page_infix = "_page_"):
+    """Returns a tuple, with the results as a dictionary for the first element
+    and a dictionary of missing chapters as the second element """
+    
     def load_obj(name):
         with open(name + '.pkl', 'rb') as f:
             return pickle.load(f)
@@ -80,4 +81,21 @@ def load_issue_dicts(db_path, id_path,
             if not at_least_one:
                 raise ValueError("Series number {!s} doesn't actually have any chapters!".format(k))
     return((big_dict, dict_of_missing_chapters))
+
+# This just returns the ids, and is used to see what ids were saved.
+#    Again, on a better computer, you could just do shelf.keys() or something
+def get_ids_from_db(db_path, id_path):
+    def load_obj(name):
+        with open(name + '.pkl', 'rb') as f:
+            return pickle.load(f)
+    
+    list_of_ids = []
+    ids = set(load_obj(id_path))
+    
+    with shelve.open(db_path) as db:
+        for k in ids:
+            if k in db:
+                list_of_ids += [k]
+    return(list_of_ids)
+
 

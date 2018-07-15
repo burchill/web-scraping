@@ -12,7 +12,8 @@ import re, os
 import threading
 from queue import Queue
 from basic_functions import PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify
+    clean_find, get_string, save_progress, ninja_soupify_and_pass
+from load_for_r import get_ids_from_db
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -712,6 +713,7 @@ def main():
     # Declare some global variables only for main
     global START_OVER
     global METADATA_BOOL
+    global LIST_OF_IDS_TO_USE
     
     global Issue_info_list
     Issue_info_list = []
@@ -734,10 +736,14 @@ def main():
     if START_OVER:
         manga_ids = list(set(load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"))) 
     else: # otherwise, try to load the remaining ones
-        manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
-        try: Error_list = load_obj(MAIN_PATH + "errors")
-        except FileNotFoundError: 
-            warn("The file containing the errors does not exist")
+        # If you want to do the issue_task version of a list of ids
+        if METADATA_BOOL == False and LIST_OF_IDS_TO_USE:
+            manga_ids = LIST_OF_IDS_TO_USE
+        else: # otherwise get the remaining ones
+            manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
+            try: Error_list = load_obj(MAIN_PATH + "errors")
+            except FileNotFoundError: 
+                warn("The file containing the errors does not exist")
     original_manga_ids = manga_ids
     
     # This variable checks and sees if the next loop exited naturally
@@ -855,32 +861,29 @@ def define_global_variables():
 
 
 
-if __name__ == "__main__":
-    global RUN_NAME
-    RUN_NAME = "BA"
-    
-    
+if __name__ == "__main__": 
+    define_global_variables()
+    global MAIN_PATH
+       
+    # To change:
     global START_OVER
     global METADATA_BOOL
+    global LIST_OF_IDS_TO_USE 
     
     START_OVER = False
     METADATA_BOOL = True # if False, it runs the issue_task
-
-    define_global_variables()
-    global MAIN_PATH
+    # If you don't want to use, just set to None
+    LIST_OF_IDS_TO_USE = get_ids_from_db(MAIN_PATH + "first_1891", "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
     
-    soup = soupify("https://www.mangaupdates.com/series.html?id=112368")
-    meta= metadata_task(soup)
-    for k, v in meta.items():
-        print("{0}: {1}".format(k,v))
-     
+    print(LIST_OF_IDS_TO_USE)
+    
 #     metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
 #     issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
 #     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
 #     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
-     
-    print("CCCCCCCCCCCCCC")
- 
+#      
+#     print("CCCCCCCCCCCCCC")
+#  
 #     main()
 
 
