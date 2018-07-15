@@ -194,6 +194,8 @@ def get_soup_row_list(soup_obj):
     """
     table = soup_obj.find("td",{'class','releasestitle'}).parent.parent
     rows = list(table.find_all("tr"))
+    # Get rid of the blank / "An asterisk (*) denotes series information..." rows
+    rows = [e for e in rows if "colspan" not in e.td.attrs]
     # Drop the title row and drop the empty first row
     return(rows[2:])
 def soup_row_to_string_list(soup_row):
@@ -892,7 +894,7 @@ if __name__ == "__main__":
     # If you don't want to use, just set to None
     LIST_OF_IDS_TO_USE = get_ids_from_db(MAIN_PATH + "first_1891", "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
 
-    
+
     metadata_saver = save_progress(MAIN_PATH + "delete", save_progress.identity, save_after_n=200)
     issue_task_saver = save_progress(MAIN_PATH + "first_1891_issues", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
