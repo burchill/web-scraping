@@ -41,9 +41,9 @@ def load_issue_dicts(db_path, id_path,
         with open(name + '.pkl', 'rb') as f:
             return pickle.load(f)
     
-    big_dict = [] # a dict of dicts which will have the results
-    dict_of_all_saved_manga_ids = [] # dict
-    dict_of_missing_chapters = [] # list of dictionaries
+    big_dict = {} # a dict of dicts which will have the results
+    dict_of_all_saved_manga_ids = {} # dict
+    dict_of_missing_chapters = {} # dictionary of lists
     ids = set(load_obj(id_path))
 
     with shelve.open(db_path) as db:
@@ -57,7 +57,7 @@ def load_issue_dicts(db_path, id_path,
                 dict_of_all_saved_manga_ids[k] = max_pages
                 
         # Get all the pages you can
-        for k, v in dict_of_all_saved_manga_ids:
+        for k, v in dict_of_all_saved_manga_ids.items():
             at_least_one = False
             for page_number in range(1, v+1):
                 val = "{series_id}{infix}{n!s}".format(series_id = k,
@@ -74,7 +74,7 @@ def load_issue_dicts(db_path, id_path,
                     else:
                         big_dict[k] = {page_number: a}                       
                 else:
-                    if dict_of_missing_chapters[k]:
+                    if k in dict_of_missing_chapters:
                         dict_of_missing_chapters[k] = dict_of_missing_chapters[k] + [page_number]
                     else:
                         dict_of_missing_chapters[k] = [page_number]
@@ -97,5 +97,18 @@ def get_ids_from_db(db_path, id_path):
             if k in db:
                 list_of_ids += [k]
     return(list_of_ids)
+
+
+if __name__ == "__main__": 
+    
+    MAIN_PATH = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
+    ids = "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"
+    
+    results, missing_chapters = load_issue_dicts(MAIN_PATH + "first_1891_issues", ids)
+    for k, v in missing_chapters.items():
+        print("{0}: {1}, {2}".format(k, len(v), v))
+    print(len(missing_chapters.keys()))
+    print(len(results.keys()))
+    print(results["3552"])
 
 
