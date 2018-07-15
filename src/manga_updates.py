@@ -28,6 +28,10 @@ from time import sleep # ehhh
 '''
 TO-DO:
      
+     To consider:
+         * get better information than just the name of the group
+         * redesign everything from the perspective of the translating group
+     
      * make the issue_task_saver global?
      
      * make it so that when it's not starting a fresh, it gets only the ones that haven't been done
@@ -871,20 +875,19 @@ if __name__ == "__main__":
     global LIST_OF_IDS_TO_USE 
     
     START_OVER = False
-    METADATA_BOOL = True # if False, it runs the issue_task
+    METADATA_BOOL = False # if False, it runs the issue_task
     # If you don't want to use, just set to None
     LIST_OF_IDS_TO_USE = get_ids_from_db(MAIN_PATH + "first_1891", "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
+
     
-    print(LIST_OF_IDS_TO_USE)
-    
-#     metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
-#     issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
-#     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
-#     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
-#      
-#     print("CCCCCCCCCCCCCC")
-#  
-#     main()
+    metadata_saver = save_progress(MAIN_PATH + "delete", save_progress.identity, save_after_n=200)
+    issue_task_saver = save_progress(MAIN_PATH + "first_1891_issues", save_progress.identity, save_after_n=200)
+    ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
+    nsap = partial(ninja_soupify_and_pass, ninja_soupify)
+      
+    print("CCCCCCCCCCCCCC")
+  
+    main()
 
 
 
