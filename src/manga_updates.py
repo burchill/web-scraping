@@ -12,8 +12,7 @@ import re, os
 import threading
 from queue import Queue
 from basic_functions import PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass,\
-    clean_find_all
+    clean_find, get_string, save_progress, ninja_soupify_and_pass
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -27,6 +26,15 @@ from functools import wraps, partial # for the decorators
 
 '''
 TO-DO:
+     
+     * NEED TO DO: make it so that the issue_getter somehow gets all the volumes of something right
+             currently it doesn't save the page numbers.  I'm thinking this is going to have require enough
+             of a rewrite that I'll just separate the metadata and issues functions.
+             maybe not.
+        
+        New plan:  the first time I encounter a series to get issues from, I'll make an entry called:
+            ("<series_id>_pages", <full_page_number>)
+     
      
      * make it so that when it's not starting a fresh, it gets only the ones that haven't been done
      * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
@@ -559,8 +567,10 @@ def get_series_id(soup_obj):
 
 
 
-
+# Basically returns a dictionary of all the metadata
 def metadata_task(soup):
+    """takes a soup object of a series' page and returns a dictionary of the metadata"""
+    
     # Get the categories
     category_dict = get_all_categories(soup)    
     # the metadata dictionary
@@ -613,6 +623,7 @@ def manga_worker():
     global manga_q
     
     while True:
+        # Gets the manga id, and whether the worker should process the releases or the metadata 
         manga_id, is_metadata, *page_number = manga_q.get()
         try:
             if is_metadata:
@@ -625,8 +636,9 @@ def manga_worker():
             else:
                 # Uses the soupify_and_pass function to load a url and pass it into the issue_task function
                 issue_results = nsap(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
-                with update_info_lock:
-                    Update_info_list+=issue_results
+                # importantly, append the page number to the ID in a separable way
+                issue_task_saver(("{0}_page_{1}".format(manga_id, page_number[0]), issue_results))
+                Update_info_list += [manga_id]
         except Exception as error_m:
             print("MANGA ID FUCK UP = {!s}".format(manga_id))
             Error_list+=[[str(error_m), manga_id, is_metadata]]
@@ -662,10 +674,10 @@ def get_issue_info_from_table(soup_obj, manga_id, expected_number_of_columns=5):
             
 
 
-def issue_task(url, manga_id, page_number):
+def issue_task(soup, manga_id, page_number):
 #     print("manga id: {0}, page: {1}".format(manga_id, page_number))
     # Load the page and soupify it
-    soup = ninja_soupify(url)
+#     soup = ninja_soupify(url)
     # If it's the first page and a valid series...
     if check_whether_series_valid(soup):
         if page_number == 1:
@@ -675,9 +687,13 @@ def issue_task(url, manga_id, page_number):
                 # and put them on the queue too
                 for i in range(2, max_page+1):
                     manga_q.put([manga_id, False, i])
+                # but also add the special value of how many pages it has
+#                 issue_task_saver(("{0}_pagenum".format(manga_id), max_page))
+#             else:
+#                 issue_task_saver(("{0}_pagenum".format(manga_id), 1))
                     
         global EXPECTED_COL_NUM
-        return((manga_id, get_issue_info_from_table(soup, manga_id, EXPECTED_COL_NUM)))
+        return(get_issue_info_from_table(soup, manga_id, EXPECTED_COL_NUM))
     else: 
         return(None)
          
@@ -713,7 +729,8 @@ def main():
     else:
         manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
         try: Error_list = load_obj(MAIN_PATH + "errors")
-        except FileNotFoundError: print("Error file does not exist")
+        except FileNotFoundError: 
+            warn("The file containing the errors does not exist")
     original_manga_ids = manga_ids
     
     try:
@@ -804,17 +821,19 @@ if __name__ == "__main__":
     global START_OVER
     global METADATA_BOOL
     
-    START_OVER = True
+    START_OVER = False
     METADATA_BOOL = True # if False, it runs the issue_task
 
     define_global_variables()
     global MAIN_PATH
     
+    
+
     metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
     issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
-    
+     
     print("CCCCCCCCCCCCCC")
-
+ 
     main()
