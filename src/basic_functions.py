@@ -50,11 +50,11 @@ class save_progress(object):
         
         # Not affected by args:
         self._writing_lock = threading.Lock()
-        self._data_lock = threading.Lock() # don't need it
+        self._data_lock = threading.Lock() # I don't think I technically need a lock for editing a dictionary
         self._n = 0
         self.data = {}
-        self._c = 0 # For tracking stuff rulllll good
-        self._c2 = 0 # For tracking stuff rulllll good
+        self._c = 0 # For tracking stuff rulllll good, counts when values are added in the call
+        self._c2 = 0 # For tracking stuff rulllll good, counts how many keys are added to the shelf
 
     def __call__(self, *args, **kwargs):
         # If it needs to sync/save
@@ -226,7 +226,7 @@ def clean_find_all(soup_t,args):
 #        but more rigid version.
 
 def proxy_decorator(switch_after_n):
-    """ A decorator that let's you specify the number of requests before 
+    """ A decorator that lets you specify the number of requests before 
     switching proxies for `manage_proxies` and keeps the decorator syntactic sugar."""
     def inner_decorator(fn):
         functools.wraps(fn)
