@@ -12,7 +12,7 @@ import re, os
 import threading
 from queue import Queue
 from basic_functions import PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass
+    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -27,14 +27,7 @@ from time import sleep # ehhh
 '''
 TO-DO:
      
-     * NEED TO DO: make it so that the issue_getter somehow gets all the volumes of something right
-             currently it doesn't save the page numbers.  I'm thinking this is going to have require enough
-             of a rewrite that I'll just separate the metadata and issues functions.
-             maybe not.
-        
-        New plan:  the first time I encounter a series to get issues from, I'll make an entry called:
-            ("<series_id>_pages", <full_page_number>)
-     
+     * make the issue_task_saver global?
      
      * make it so that when it's not starting a fresh, it gets only the ones that haven't been done
      * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
@@ -42,15 +35,25 @@ TO-DO:
      * filter out one-shots
              Status in Country of Origin:
                 Oneshot (Complete)  ie 112368
-     * Coin Rand ['Add']  is currently ['Coin Rand\xa0[', 'Add', ']'] ie 112368
-     * Multiple completion datees:
-            Oneshot (Complete)
-            2 Volumes (Complete) ie 46225
      * get rid of what's in parentheses for "serialized_in"
          eg ['Betsucomi','(Shogakukan)', ''] 13581
              also strip ending (they can have multiple serializations though
-     * get rid of extra blanks in "English pubs"
+             
+    XXXX Coin Rand ['Add']  is currently ['Coin Rand\xa0[', 'Add', ']'] ie 112368
+    XXXX Multiple completion datees:
+        Oneshot (Complete)
+        2 Volumes (Complete) ie 46225         
+    XXXXX get rid of extra blanks in "English pubs"
          eg ['Harlequin K.K.', '', 'SoftBank Creative', '', ''] 32093
+         
+         
+    XXXX: make it so that the issue_getter somehow gets all the volumes of something right
+             currently it doesn't save the page numbers.  I'm thinking this is going to have require enough
+             of a rewrite that I'll just separate the metadata and issues functions.
+             maybe not.
+        
+        New plan:  the first time I encounter a series to get issues from, I'll make an entry called:
+            ("<series_id>_pages", <full_page_number>)
      
 '''
 
@@ -617,7 +620,7 @@ def metadata_task(soup):
 
 # The worker thread pulls an item from the queue and processes it
 def manga_worker():
-    global Update_info_list
+    global Issue_info_list
     global Metadata_list
     global Error_list
     global manga_q
@@ -638,7 +641,7 @@ def manga_worker():
                 issue_results = nsap(ISSUE_URL_FORMAT.format(manga_id, page_number[0]), issue_task, manga_id, page_number[0])
                 # importantly, append the page number to the ID in a separable way
                 issue_task_saver(("{0}_page_{1}".format(manga_id, page_number[0]), issue_results))
-                Update_info_list += [manga_id]
+                Issue_info_list += [manga_id]
         except Exception as error_m:
             print("MANGA ID FUCK UP = {!s}".format(manga_id))
             Error_list+=[[str(error_m), manga_id, is_metadata]]
@@ -670,10 +673,13 @@ def get_issue_info_from_table(soup_obj, manga_id, expected_number_of_columns=5):
 
 
     
-      
+
             
 
-
+# Gets the issue update information
+# Not the cleanest code, since it adds things to the queue and saves things as well as returning different stuff,
+#    but I didn't want to have to load the soup multiple times, and better changes
+#    would take too long
 def issue_task(soup, manga_id, page_number):
 #     print("manga id: {0}, page: {1}".format(manga_id, page_number))
     # Load the page and soupify it
@@ -688,10 +694,9 @@ def issue_task(soup, manga_id, page_number):
                 for i in range(2, max_page+1):
                     manga_q.put([manga_id, False, i])
                 # but also add the special value of how many pages it has
-#                 issue_task_saver(("{0}_pagenum".format(manga_id), max_page))
-#             else:
-#                 issue_task_saver(("{0}_pagenum".format(manga_id), 1))
-                    
+                issue_task_saver(("{0}_pagenum".format(manga_id), max_page))
+            else:
+                issue_task_saver(("{0}_pagenum".format(manga_id), 1))
         global EXPECTED_COL_NUM
         return(get_issue_info_from_table(soup, manga_id, EXPECTED_COL_NUM))
     else: 
@@ -708,8 +713,8 @@ def main():
     global START_OVER
     global METADATA_BOOL
     
-    global Update_info_list
-    Update_info_list = []
+    global Issue_info_list
+    Issue_info_list = []
     
     global Metadata_list
     Metadata_list = []
@@ -773,7 +778,7 @@ def main():
                 
             finally:
                 if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
-                else: close_up(Update_info_list, original_manga_ids)
+                else: close_up(Issue_info_list, original_manga_ids, Error_list)
                 metadata_saver.close()
                 issue_task_saver.close()
                 
@@ -788,7 +793,7 @@ def main():
                 
         else: # if it didn't end correctly
             if METADATA_BOOL: close_up(Metadata_list, original_manga_ids, Error_list)
-            else: close_up(Update_info_list, original_manga_ids)
+            else: close_up(Issue_info_list, original_manga_ids, Error_list)
             metadata_saver.close()
             issue_task_saver.close()
             
@@ -802,6 +807,8 @@ def main():
             print("DONE")
 
 
+# Sees what was done and what wasn't, and saves some files
+# Issue info should probably be processed again after the fact to make sure all the pages were collected right
 def close_up(finished_ids, original_ids, errors):
     global MAIN_PATH
     original_ids = set(original_ids)
@@ -842,7 +849,17 @@ def define_global_variables():
     global Error_list # something to store all the errors
     Error_list = []
 
+
+
+
+
+
+
 if __name__ == "__main__":
+    global RUN_NAME
+    RUN_NAME = "BA"
+    
+    
     global START_OVER
     global METADATA_BOOL
     
@@ -852,11 +869,15 @@ if __name__ == "__main__":
     define_global_variables()
     global MAIN_PATH
     
+    soup = soupify("https://www.mangaupdates.com/series.html?id=112368")
+    meta= metadata_task(soup)
+    for k, v in meta.items():
+        print("{0}: {1}".format(k,v))
      
 #     metadata_saver = save_progress(MAIN_PATH + "first", save_progress.identity, save_after_n=200)
 #     issue_task_saver = save_progress(MAIN_PATH + "issues", save_progress.identity, save_after_n=200)
-    ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
-    nsap = partial(ninja_soupify_and_pass, ninja_soupify)
+#     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
+#     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
      
     print("CCCCCCCCCCCCCC")
  
