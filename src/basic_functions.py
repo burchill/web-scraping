@@ -30,6 +30,9 @@ def remove_duplicate_elements(l):
     """ Right now, just `list(set(l))` """
     return (list(set(l)))
 
+def join_urls(base, url, allow_fragments=True):
+    return(urllib.parse.urljoin(base, url, allow_fragments))
+
 
 # ------------------------------ General saving functions ------------------------------------------ #
 class save_progress(object):
@@ -165,6 +168,9 @@ def load_image(image_url, *args, **kwargs):
     image_file.seek(0)
     im = Image.open(image_file)
     return(im)
+# Saves an image
+def save_image(image, path):
+    image.save(path)
 
 # Note, doesn't let you pass additional args to `soupify`
 def soupify_and_pass(url, f, *args, **kwargs):
