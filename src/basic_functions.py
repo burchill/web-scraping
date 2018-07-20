@@ -168,6 +168,7 @@ def load_image(image_url, *args, **kwargs):
     image_file.seek(0)
     im = Image.open(image_file)
     return(im)
+
 # Saves an image
 def save_image(image, path):
     image.save(path)

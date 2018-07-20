@@ -12,7 +12,7 @@ import shelve, pickle
 # So I have to already know all the possibly keys and try all the possible values,
 #    which kinda sucks. But whatever
 
-def load_dicts(db_path, id_path):
+def load_metadata_dicts(db_path, id_path):
     def load_obj(name):
         with open(name + '.pkl', 'rb') as f:
             return pickle.load(f)
@@ -110,5 +110,7 @@ if __name__ == "__main__":
     print(len(missing_chapters.keys()))
     print(len(results.keys()))
     print(results["3552"])
+    print(len(results["133571"]))
+#     only_over_one = [e for e in results.keys() if ]
 
 
