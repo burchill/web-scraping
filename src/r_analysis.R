@@ -3,7 +3,7 @@ library(dplyr)
 library(magrittr)
 library(purrr)
 
-
+# I don't quite remember what this does...
 apply_f <- function(df, f, subset_vars=FALSE) {
   if (is.logical(subset_vars)) {
     df %>% bind_cols(map_df(.$data, ~map(., f)))
@@ -12,8 +12,7 @@ apply_f <- function(df, f, subset_vars=FALSE) {
       map_df(.$data, 
              ~map(set_names(.[subset_vars], subset_vars), 
                   f)))
-  }
-}
+}}
 
 
 use_python("/Library/Frameworks/Python.framework/Versions/3.4/bin/python3.4", required=TRUE)
@@ -22,11 +21,15 @@ sys$version_info
 
 main_path = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
 id_path = "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"
-db_file = "first"
+metadata_db_file = "first_1891"
+issue_db_file = "first_1891_issues"
+
 
 source_python(paste0(main_path, "load_for_r.py"))
-list_of_dicts <- load_dicts(paste0(main_path, db_file),
-                            id_path)
+list_of_dicts <- load_metadata_dicts(paste0(main_path, metadata_db_file), id_path)
+issue_data_results <- load_issue_dicts(paste0(main_path, issue_db_file), id_path)
+issue_dict <- issue_data_results[[1]]
+missing_chap_dict <- issue_data_results[2]
 
 ########################################################
 l = list_of_dicts
@@ -67,7 +70,37 @@ map(df$data, ~paste0(sort(names(.$list_stats)), collapse=";")) %>%
 
 
 
-##############
+##########################################################
+
+############### NEW stuff ###############################
+
+
+make_issue_dataframe <- function(d) {
+  df <- d %>%
+    purrr::keep(~length(.) < 100) %>% # filter out weirdos
+    purrr::imap_dfr(function(series, series_id) {
+      purrr::imap_dfr(series, function(page, pagenum){
+        purrr::map_dfr(page, function(release) {
+          as.data.frame(t(release), stringsAsFactors=FALSE)
+        }) %>%
+          mutate(PageNumber = pagenum)
+      }) %>%
+        mutate(SeriesID = series_id)
+    }) %>%
+    transmute(Date = lubridate::mdy(V1),
+              Title = V2,
+              Volume = V3,
+              Chapter = V4,
+              Groups = V5,
+              PageNumber, SeriesID) %>%
+    filter(!is.na(Date))
+} 
+issue_df <- make_issue_dataframe(issue_dict)
+
+
+
+
+###################### older stuff: #########################
 
 
 
