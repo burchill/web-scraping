@@ -12,7 +12,7 @@ import re, os
 import threading
 from queue import Queue
 from basic_functions import PageScrapeException, BadPageException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify
+    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify, load_obj, save_obj
 from load_for_r import get_ids_from_db
 from bs4 import Tag
 from warnings import warn
@@ -34,15 +34,15 @@ TO-DO:
      * make the issue_task_saver global?
      
      * make it so that when it's not starting a fresh, it gets only the ones that haven't been done
-     * make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
      
      * filter out one-shots
              Status in Country of Origin:
                 Oneshot (Complete)  ie 112368
      * get rid of what's in parentheses for "serialized_in"
          eg ['Betsucomi','(Shogakukan)', ''] 13581
-             also strip ending (they can have multiple serializations though
-             
+             also strip ending (they can have multiple serializations though           
+    
+    XXXX make `get_manga_ids_from_table` analogous to `get_issue_info_from_table` in the sense that it takes a soup object
     XXXX Coin Rand ['Add']  is currently ['Coin Rand\xa0[', 'Add', ']'] ie 112368
     XXXX Multiple completion datees:
         Oneshot (Complete)
@@ -239,21 +239,20 @@ def get_ids_from_links(soup_obj, prefix="series.html?", remove_duplicates=True):
 ######################## 
 
 
-def get_manga_ids_from_table(url):
+def get_manga_ids_from_table(soup):
     """
-    Gets the id numbers associated with each manga from the table in a url.
+    Gets the id numbers associated with each manga from the table in a soup object.
     
     I.e. at urls like: "https://www.mangaupdates.com/series.html?page={0}&letter={1}&perpage=100&filter=some_releases&type=manga"
     """
-    s = ninja_soupify(url)
     # Finds the table that holds all the rows of manga
-    table = s.find("table",{"class":"series_rows_table"})
+    table = soup.find("table",{"class":"series_rows_table"})
     # Removes the first 2 rows (cuz they're titles)
     #     and the last six rows (i forget why)
     rows = table.find_all("tr")[2:-6]
     manga_ids = [e.find("td").a["href"].split("=")[-1] for e in rows]
     if manga_ids == []:
-        raise PageScrapeException(message="No manga id rows were found on page!", url=url)
+        raise PageScrapeException(message="No manga id rows were found on page!")
     return(manga_ids)
 
 def collect_valid_series():
@@ -272,30 +271,31 @@ def collect_valid_series():
     # go through all the pages of manga that don't start with alphabetic characters
     #    currently there are 4 
     for counter in range(1, NUMBER_OF_NONALPHA_MANGA_PAGES):
-        try:
-            all_manga_ids += get_manga_ids_from_table(nonalpha_url_format.format(counter))
+        try: 
+            all_manga_ids += nsap(nonalpha_url_format.format(counter), get_manga_ids_from_table)
         except PageScrapeException as err:
             # I know for a fact that there are "non-alpha" manga. If I can't find any, something has gone horribly wrong
             raise AssertionError("There should be non-alphabetical manga to load! "+err.url)
     
-    # Due to limitations of how many pages can be displayed for any given letter, it's easier to go by
-    #    two letter combinations, e.g. manga that start with "AB", etc.
-    # Just trust me, alright?  This makes it easier/possible, believe it or not
+    # I no longer know if the following is true, but hey, whatever:
+    # # Due to limitations of how many pages can be displayed for any given letter, it's easier to go by
+    # #    two letter combinations, e.g. manga that start with "AB", etc.
+    # # Just trust me, alright?  This makes it easier/possible, believe it or not
     letterpairs = list(combinations_with_replacement(ascii_uppercase,2))
     letterpairs[:] = [e[0]+e[1] for e in letterpairs]
     for letter in letterpairs:
         try:
-            all_manga_ids += get_manga_ids_from_table(url_format.format(1,letter))
+            all_manga_ids += nsap(url_format.format(1, letter), get_manga_ids_from_table)
         except PageScrapeException:
             # Sometimes there aren't manga that start with certain characters
             print("no "+letter+" values")
         # Gets the number of pages that start with that letter combo...
-        page_count = get_page_count(ninja_soupify(url_format.format(1,letter)))
+        page_count = nsap(url_format.format(1, letter), get_page_count) 
         if page_count:
             # ...and puts them on the queue too
             for i in range(2, page_count+1):
                 try:
-                    all_manga_ids += get_manga_ids_from_table(url_format.format(i,letter))
+                    all_manga_ids += nsap(url_format.format(i, letter), get_manga_ids_from_table)
                 except PageScrapeException:
                     print("no {0} values for page #{1!s}".format(letter, i))
     return(all_manga_ids)
