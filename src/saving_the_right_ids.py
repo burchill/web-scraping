@@ -20,12 +20,16 @@ from time import sleep # ehhh
 def manga_id_worker():
     global manga_q
     global manga_id_list
+    global info_tracker
+    
     
     while True:
         # Gets the manga id, and whether the worker should process the releases or the metadata 
         url = manga_q.get()
         try:
-            manga_id_list.extend(nsap(url, get_manga_ids_from_table))
+            results = nsap(url, get_manga_ids_from_table)
+            manga_id_list.extend(results)
+            info_tracker += [{"url":url, "results":results}]
         except Exception:
             print("MANGA ID FUCK UP = {!s}".format(url))
         finally:
@@ -37,6 +41,12 @@ def main():
     # Make a global queue
     global manga_q
     global manga_id_list
+    # Make something for tracking info
+    global info_tracker
+    info_tracker = []
+    
+    
+    
     manga_q = Queue()
     for i in range(NUM_THREADS): 
         t = threading.Thread(target = manga_id_worker)
@@ -89,6 +99,9 @@ def main():
     print(manga_id_list)
     save_obj(list(set(manga_id_list)), "new_threaded_series_ids")
     print("Saved!")
+    save_obj(info_tracker, "collect_id_info_tracker")
+    for e in info_tracker:
+        print(e.items())
     
 def define_global_variables():
     # Global Constants
