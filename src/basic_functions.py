@@ -119,6 +119,11 @@ class PageScrapeException(Exception):
     def __init__(self, message, url="NotGiven"):
         self.expression = url
         self.message = message
+# For when I want to say that this page shouldn't be scraped again, basically
+class BadPageException(Exception):
+    def __init__(self, message, identifier="NotGiven"):
+        self.expression = identifier
+        self.message = message
 
 # This is a function that tries to get a response from a url, trying to do so `n_attempts` number of times
 def try_to_urlopen(url_t, timeout_sec=30, n_attempts=2, new_header=True, 
