@@ -98,19 +98,27 @@ def get_ids_from_db(db_path, id_path):
                 list_of_ids += [k]
     return(list_of_ids)
 
+def get_data_from_error(error_file):
+    def load_obj(name):
+        with open(name + '.pkl', 'rb') as f:
+            return pickle.load(f)
+    return(load_obj(error_file))
+    
+
 
 if __name__ == "__main__": 
     
     MAIN_PATH = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
     ids = "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"
     
-    results, missing_chapters = load_issue_dicts(MAIN_PATH + "first_1891_issues", ids)
-    for k, v in missing_chapters.items():
-        print("{0}: {1}, {2}".format(k, len(v), v))
-    print(len(missing_chapters.keys()))
-    print(len(results.keys()))
-    print(results["3552"])
-    print(len(results["133571"]))
+#     results, missing_chapters = load_issue_dicts(MAIN_PATH + "first_1891_issues", ids)
+#     for k, v in missing_chapters.items():
+#         print("{0}: {1}, {2}".format(k, len(v), v))
+#     print(len(missing_chapters.keys()))
+#     print(len(results.keys()))
+#     print(results["3552"])
+#     print(len(results["133571"]))
+    print(get_data_from_error("errors"))
 #     only_over_one = [e for e in results.keys() if ]
 
 
