@@ -255,59 +255,6 @@ def get_manga_ids_from_table(soup):
         raise PageScrapeException(message="No manga id rows were found on page!")
     return(manga_ids)
 
-# This function does NOT use multithreading!
-def collect_valid_series():
-    """
-    Collects the "series IDs" for all manga series that meet certain qualifications and returns them in a list.
-    
-    These qualifications are specified in the `url_format` strings via the way the site filters rows: 
-        they must be "manga" and they must have "some releases"
-    """
-    # This is the format of the urls that let us browse all the manga by first letter
-    url_format          = "https://www.mangaupdates.com/series.html?page={0}&letter={1}&perpage=100&filter=some_releases&type=manga"
-    # In order to get those that don't begin with a letter, we use this format
-    nonalpha_url_format = "https://www.mangaupdates.com/series.html?page={0}&perpage=100&filter=some_releases&type=manga"
-    all_manga_ids = []
-    
-    # go through all the pages of manga that don't start with alphabetic characters
-    #    currently there are 4 
-    for counter in range(1, NUMBER_OF_NONALPHA_MANGA_PAGES):
-        try: 
-            all_manga_ids += nsap(nonalpha_url_format.format(counter), get_manga_ids_from_table)
-        except PageScrapeException as err:
-            # I know for a fact that there are "non-alpha" manga. If I can't find any, something has gone horribly wrong
-            raise AssertionError("There should be non-alphabetical manga to load! "+err.url)
-    
-    # I no longer know if the following is true, but hey, whatever:
-    # # Due to limitations of how many pages can be displayed for any given letter, it's easier to go by
-    # #    two letter combinations, e.g. manga that start with "AB", etc.
-    # # Just trust me, alright?  This makes it easier/possible, believe it or not
-    letterpairs = list(combinations_with_replacement(ascii_uppercase,2))
-    letterpairs[:] = [e[0]+e[1] for e in letterpairs]
-    display_counter = 0 # for printout purposes
-    for letter in letterpairs:
-        # For displaying updates
-        display_counter += 1
-        if display_counter % 30 == 0:
-            print("Starting pair: "+letter)
-        try:
-            all_manga_ids += nsap(url_format.format(1, letter), get_manga_ids_from_table)
-        except PageScrapeException:
-            # Sometimes there aren't manga that start with certain characters
-            print("no "+letter+" values")
-        # Gets the number of pages that start with that letter combo...
-        page_count = nsap(url_format.format(1, letter), get_page_count) 
-        if page_count:
-            # ...and puts them on the queue too
-            for i in range(2, page_count+1):
-                try:
-                    all_manga_ids += nsap(url_format.format(i, letter), get_manga_ids_from_table)
-                except PageScrapeException:
-                    print("no {0} values for page #{1!s}".format(letter, i))
-    return(list(set(all_manga_ids)))
-
-
-
 
 def get_all_categories(soup_obj):
     """
