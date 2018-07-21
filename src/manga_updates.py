@@ -20,7 +20,6 @@ from bs4.element import NavigableString
 from string import ascii_uppercase
 from itertools import combinations_with_replacement
 
-import pickle
 from functools import wraps, partial # for the decorators
 
 from time import sleep # ehhh
@@ -101,12 +100,6 @@ TO-DO:
 
 
 # ------------------------------------------ Basic functions -----------------------------------
-def save_obj(obj, name ):
-    with open(name + '.pkl', 'wb') as f:
-        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
-def load_obj(name ):
-    with open(name + '.pkl', 'rb') as f:
-        return pickle.load(f)     
  
 def is_error_tag(tag):
     """

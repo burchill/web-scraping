@@ -4,6 +4,7 @@ Created on Mar 16, 2018
 @author: zburchill
 '''
 import urllib.parse
+import pickle
 import logging, os, random, functools, shelve, threading
 import io # for loading images
 from warnings import warn
@@ -17,6 +18,15 @@ import requests # http://docs.python-requests.org/en/latest/user/install/#instal
 
 
 # ------------------------------ Real basic functions ------------------------------ #
+# Loading and saving pickled stuff
+def save_obj(obj, name ):
+    with open(name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+def load_obj(name ):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)     
+
+
 
 # Turns navigable strings to normal ones
 def get_string(soup_element):
