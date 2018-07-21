@@ -11,8 +11,8 @@ import re, os
 # for threading
 import threading
 from queue import Queue
-from basic_functions import PageScrapeException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass
+from basic_functions import PageScrapeException, BadPageException, ninja_soupify_simpler, remove_duplicate_elements,\
+    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify
 from load_for_r import get_ids_from_db
 from bs4 import Tag
 from warnings import warn
@@ -490,7 +490,7 @@ def clean_related_series_category(soup_obj):
     
 
     
-    print(break_strings_by_line(soup_obj))
+#     print(break_strings_by_line(soup_obj))
     
     
     
@@ -585,41 +585,46 @@ def metadata_task(soup):
     category_dict = get_all_categories(soup)    
     # the metadata dictionary
     m_d = {}
-    # Let's turn those categories into useable data
-    m_d["genre"] = clean_genre_category(category_dict["Genre"])
-    m_d["categories"] = clean_categories_category(category_dict["Categories"])
-    m_d["forum_stuff"] = clean_forum_category(category_dict["Forum"])
-    m_d["user_ratings"] = clean_user_rating_category(category_dict["User Rating"])
-    m_d["was_anime"] = clean_anime_category(category_dict["Anime Start/End Chapter"])
-    m_d["status"] = clean_status_category(category_dict["Status in Country of Origin"])
-    m_d["authors"] = clean_authors_category(category_dict["Author(s)"])
-    m_d["artists"] = clean_authors_category(category_dict["Artist(s)"])
-    recs = clean_rec_category(category_dict["Recommendations"])
-    m_d["rec_ids"] = recs["ids"]
-    m_d["rec_names"] = recs["names"]
-    m_d["related_series"] = clean_related_series_category(category_dict["Related Series"])
-    
-    # ----------- 'Defaultly' cleaned categories:
-    m_d["year"] = clean_default_category(category_dict["Year"], remove_empty=True)
-    m_d["original_pub"] = clean_default_category(category_dict["Original Publisher"], remove_empty=True)
-    m_d["english_pub"] = clean_default_category(category_dict["English Publisher"], remove_empty=True) 
-    m_d["description"] = clean_default_category(category_dict["Description"])
-    m_d["type"] = clean_default_category(category_dict["Type"])
-    m_d["associated_names"] = clean_default_category(category_dict["Associated Names"])
-    m_d["completely_scanlated"] = clean_default_category(category_dict["Completely Scanlated?"])
-    m_d["last_updated"] = clean_default_category(category_dict["Last Updated"])
-    m_d["category_recs"] = clean_default_category(category_dict["Category Recommendations"])
-    m_d["serialized_in"] = clean_default_category(category_dict["Serialized In (magazine)"])
-    m_d["licensed"] = clean_default_category(category_dict["Licensed (in English)"])   
-    # ----------- Not implemented:
-    # activity_stats
-    # getting author information, such as gender/blood type
-    # image (don't see why this is useful)
     try:
-        m_d["list_stats"] = clean_list_stats_category(category_dict["List Stats"])
-    except AssertionError as errorm:
-        raise KeyboardInterrupt(str(errorm))
-
+        # Let's turn those categories into useable data
+        m_d["genre"] = clean_genre_category(category_dict["Genre"])
+        m_d["categories"] = clean_categories_category(category_dict["Categories"])
+        m_d["forum_stuff"] = clean_forum_category(category_dict["Forum"])
+        m_d["user_ratings"] = clean_user_rating_category(category_dict["User Rating"])
+        m_d["was_anime"] = clean_anime_category(category_dict["Anime Start/End Chapter"])
+        m_d["status"] = clean_status_category(category_dict["Status in Country of Origin"])
+        m_d["authors"] = clean_authors_category(category_dict["Author(s)"])
+        m_d["artists"] = clean_authors_category(category_dict["Artist(s)"])
+        recs = clean_rec_category(category_dict["Recommendations"])
+        m_d["rec_ids"] = recs["ids"]
+        m_d["rec_names"] = recs["names"]
+        m_d["related_series"] = clean_related_series_category(category_dict["Related Series"])
+        
+        # ----------- 'Defaultly' cleaned categories:
+        m_d["year"] = clean_default_category(category_dict["Year"], remove_empty=True)
+        m_d["original_pub"] = clean_default_category(category_dict["Original Publisher"], remove_empty=True)
+        m_d["english_pub"] = clean_default_category(category_dict["English Publisher"], remove_empty=True) 
+        m_d["description"] = clean_default_category(category_dict["Description"])
+        m_d["type"] = clean_default_category(category_dict["Type"])
+        m_d["associated_names"] = clean_default_category(category_dict["Associated Names"])
+        m_d["completely_scanlated"] = clean_default_category(category_dict["Completely Scanlated?"])
+        m_d["last_updated"] = clean_default_category(category_dict["Last Updated"])
+        m_d["category_recs"] = clean_default_category(category_dict["Category Recommendations"])
+        m_d["serialized_in"] = clean_default_category(category_dict["Serialized In (magazine)"])
+        m_d["licensed"] = clean_default_category(category_dict["Licensed (in English)"])   
+        # ----------- Not implemented:
+        # activity_stats
+        # getting author information, such as gender/blood type
+        # image (don't see why this is useful)
+        try:
+            m_d["list_stats"] = clean_list_stats_category(category_dict["List Stats"])
+        except AssertionError as errorm:
+            raise KeyboardInterrupt(str(errorm))
+    except KeyError as err:
+        if "You specified an invalid series id." in soup.strings:
+            raise BadPageException("This id is bad and should be removed")
+        else:
+            raise err
     return(m_d)
     
 
@@ -641,8 +646,8 @@ def manga_worker():
                 metadata_results = nsap(SERIES_METADATA_URL_FORMAT.format(manga_id), metadata_task)
                 if metadata_results:
                     metadata_saver((manga_id, metadata_results))
-                    print("GOOOD: ")
-                    print(metadata_results)
+#                     print("GOOOD: ")
+#                     print(metadata_results)
                 Metadata_list += [manga_id]
             else:
                 # Uses the soupify_and_pass function to load a url and pass it into the issue_task function
@@ -889,19 +894,19 @@ if __name__ == "__main__":
     global METADATA_BOOL
     global LIST_OF_IDS_TO_USE 
     
-    START_OVER = False
-    METADATA_BOOL = False # if False, it runs the issue_task
+    START_OVER = True
+    METADATA_BOOL = True # if False, it runs the issue_task
     # If you don't want to use, just set to None
-    LIST_OF_IDS_TO_USE = get_ids_from_db(MAIN_PATH + "first_1891", "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
+    LIST_OF_IDS_TO_USE = None     #get_ids_from_db(MAIN_PATH + "first_1891", "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
 
-
-    metadata_saver = save_progress(MAIN_PATH + "delete", save_progress.identity, save_after_n=200)
-    issue_task_saver = save_progress(MAIN_PATH + "first_1891_issues", save_progress.identity, save_after_n=200)
+    metadata_saver = save_progress(MAIN_PATH + "full_attempt", save_progress.identity, save_after_n=200)
+    issue_task_saver = save_progress(MAIN_PATH + "full_attempt_issues", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
-      
+    
+       
     print("CCCCCCCCCCCCCC")
-  
+   
     main()
 
 
