@@ -255,6 +255,7 @@ def get_manga_ids_from_table(soup):
         raise PageScrapeException(message="No manga id rows were found on page!")
     return(manga_ids)
 
+# This function does NOT use multithreading!
 def collect_valid_series():
     """
     Collects the "series IDs" for all manga series that meet certain qualifications and returns them in a list.
@@ -283,7 +284,12 @@ def collect_valid_series():
     # # Just trust me, alright?  This makes it easier/possible, believe it or not
     letterpairs = list(combinations_with_replacement(ascii_uppercase,2))
     letterpairs[:] = [e[0]+e[1] for e in letterpairs]
+    display_counter = 0 # for printout purposes
     for letter in letterpairs:
+        # For displaying updates
+        display_counter += 1
+        if display_counter % 30 == 0:
+            print("Starting pair: "+letter)
         try:
             all_manga_ids += nsap(url_format.format(1, letter), get_manga_ids_from_table)
         except PageScrapeException:
@@ -298,7 +304,7 @@ def collect_valid_series():
                     all_manga_ids += nsap(url_format.format(i, letter), get_manga_ids_from_table)
                 except PageScrapeException:
                     print("no {0} values for page #{1!s}".format(letter, i))
-    return(all_manga_ids)
+    return(list(set(all_manga_ids)))
 
 
 
@@ -879,6 +885,11 @@ def define_global_variables():
 
 
 if __name__ == "__main__": 
+    new_series_ids = collect_valid_series()
+    save_obj(new_series_ids, "new_series_ids")
+    
+    
+    
     define_global_variables()
     global MAIN_PATH
        
