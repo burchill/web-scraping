@@ -674,6 +674,7 @@ def issue_task(soup, manga_id, page_number):
 
 def main():
     # Declare some global variables only for main
+    global VALID_ID_FILE
     global START_OVER
     global METADATA_BOOL
     global LIST_OF_IDS_TO_USE
@@ -698,7 +699,7 @@ def main():
     
     # If you want to start over from scratch, load the valid series ids
     if START_OVER:
-        manga_ids = list(set(load_obj("/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"))) 
+        manga_ids = list(set(load_obj(VALID_ID_FILE))) 
     else: # otherwise, try to load the remaining ones
         # If you want to do the issue_task version of a list of ids
         if METADATA_BOOL == False and LIST_OF_IDS_TO_USE:
@@ -806,6 +807,8 @@ def define_global_variables():
     # Global Constants
     global MAIN_PATH
     MAIN_PATH = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
+    global VALID_ID_FILE
+    VALID_ID_FILE = MAIN_PATH + "new_series_ids" # leave off the .pkl
     global NUM_THREADS 
     NUM_THREADS = 100
     global NUMBER_OF_NONALPHA_MANGA_PAGES # the number of pages of manga that don't begin with letters we have to scroll through 
@@ -832,13 +835,10 @@ def define_global_variables():
 
 
 if __name__ == "__main__": 
-    
-#     
-#     
     define_global_variables()
     global MAIN_PATH
-        
-    # To change:
+    
+    # Change to control behavior:
     global START_OVER
     global METADATA_BOOL
     global LIST_OF_IDS_TO_USE 
@@ -846,16 +846,13 @@ if __name__ == "__main__":
     START_OVER = True
     METADATA_BOOL = True # if False, it runs the issue_task
     # If you don't want to use, just set to None
-    LIST_OF_IDS_TO_USE = None     #get_ids_from_db(MAIN_PATH + "first_1891", "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids")
+    LIST_OF_IDS_TO_USE = None     #get_ids_from_db(MAIN_PATH + "first_1891", VALID_ID_FILE)
  
-#     metadata_saver = save_progress(MAIN_PATH + "full_attempt", save_progress.identity, save_after_n=200)
-#     issue_task_saver = save_progress(MAIN_PATH + "full_attempt_issues", save_progress.identity, save_after_n=200)
+    metadata_saver = save_progress(MAIN_PATH + "everything", save_progress.identity, save_after_n=200)
+    issue_task_saver = save_progress(MAIN_PATH + "everything", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify)
     
-    
-    new_series_ids = collect_valid_series()
-    save_obj(new_series_ids, "new_series_ids")
     print("Done")
 #     
 #        

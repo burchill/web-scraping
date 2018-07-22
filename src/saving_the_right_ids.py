@@ -9,11 +9,11 @@ from manga_updates import get_page_count, get_manga_ids_from_table
 
 
 from string import ascii_uppercase
-from itertools import combinations_with_replacement
+from itertools import product
 
 from functools import partial # for the decorators
 
-from time import sleep # ehhh
+from time import sleep, perf_counter # ehhh
 
 
 # The worker thread pulls an item from the queue and processes it
@@ -45,8 +45,6 @@ def main():
     global info_tracker
     info_tracker = []
     
-    
-    
     manga_q = Queue()
     for i in range(NUM_THREADS): 
         t = threading.Thread(target = manga_id_worker)
@@ -57,7 +55,7 @@ def main():
     url_format          = "https://www.mangaupdates.com/series.html?page={0}&letter={1}&perpage=100&filter=some_releases&type=manga"
     # In order to get those that don't begin with a letter, we use this format
     nonalpha_url_format = "https://www.mangaupdates.com/series.html?page={0}&perpage=100&filter=some_releases&type=manga"
-
+ 
     # go through all the pages of manga that don't start with alphabetic characters
     #    currently there are 4 
     for counter in range(1, NUMBER_OF_NONALPHA_MANGA_PAGES):
@@ -67,7 +65,7 @@ def main():
     # # Due to limitations of how many pages can be displayed for any given letter, it's easier to go by
     # #    two letter combinations, e.g. manga that start with "AB", etc.
     # # Just trust me, alright?  This makes it easier/possible, believe it or not
-    letterpairs = list(combinations_with_replacement(ascii_uppercase,2))
+    letterpairs = list(product(ascii_uppercase, repeat=2))
     letterpairs[:] = [e[0]+e[1] for e in letterpairs]
     display_counter = 0 # for printout purposes
     for letter in letterpairs:
@@ -97,7 +95,7 @@ def main():
     manga_q.join()
     print("Done!")
     print(manga_id_list)
-    save_obj(list(set(manga_id_list)), "new_threaded_series_ids")
+    save_obj(list(set(manga_id_list)), "all_series_ids")
     print("Saved!")
     save_obj(info_tracker, "collect_id_info_tracker")
     for e in info_tracker:
@@ -141,5 +139,7 @@ if __name__ == "__main__":
         
     print("CCCCCCCCCCCCCC")
     
+    starting_time = perf_counter()
     main()
+    print(perf_counter() - starting_time)
 
