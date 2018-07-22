@@ -702,7 +702,7 @@ def main():
         manga_ids = list(set(load_obj(VALID_ID_FILE))) 
     else: # otherwise, try to load the remaining ones
         # If you want to do the issue_task version of a list of ids
-        if METADATA_BOOL == False and LIST_OF_IDS_TO_USE:
+        if LIST_OF_IDS_TO_USE:
             manga_ids = LIST_OF_IDS_TO_USE
         else: # otherwise get the remaining ones
             manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
@@ -834,7 +834,7 @@ def define_global_variables():
 
 
 
-if __name__ == "__main__": 
+if __name__ == "__main__":
     define_global_variables()
     global MAIN_PATH
     
@@ -857,7 +857,7 @@ if __name__ == "__main__":
     issue_task_saver = save_progress(MAIN_PATH + "everything", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify) 
-        
+
     print("CCCCCCCCCCCCCC")
     
     main()
