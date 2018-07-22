@@ -843,22 +843,24 @@ if __name__ == "__main__":
     global METADATA_BOOL
     global LIST_OF_IDS_TO_USE 
      
-    START_OVER = True
+    START_OVER = False
     METADATA_BOOL = True # if False, it runs the issue_task
     # If you don't want to use, just set to None
-    LIST_OF_IDS_TO_USE = None     #get_ids_from_db(MAIN_PATH + "first_1891", VALID_ID_FILE)
+    
+    # loading broken stuff
+    errs = load_obj("errors")
+    errs[:] = [e[1] for e in errs]
+    
+    LIST_OF_IDS_TO_USE = errs     #get_ids_from_db(MAIN_PATH + "first_1891", VALID_ID_FILE)
  
     metadata_saver = save_progress(MAIN_PATH + "everything", save_progress.identity, save_after_n=200)
     issue_task_saver = save_progress(MAIN_PATH + "everything", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
-    nsap = partial(ninja_soupify_and_pass, ninja_soupify)
+    nsap = partial(ninja_soupify_and_pass, ninja_soupify) 
+        
+    print("CCCCCCCCCCCCCC")
     
-    print("Done")
-#     
-#        
-#     print("CCCCCCCCCCCCCC")
-#    
-#     main()
+    main()
 
 
 

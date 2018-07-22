@@ -109,8 +109,13 @@ def get_data_from_error(error_file):
 if __name__ == "__main__": 
     
     MAIN_PATH = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
-    ids = "/Users/zburchill/Documents/workspace2/python3_files/src/valid_series_ids"
+    ids = "all_series_ids"
     
+    errors = get_data_from_error("errors")
+    print(len(errors))
+    print(len(errors[0]))
+    print(len(errors[len(errors)-1]))
+    print([e for e in errors if "This id is bad and should be removed" == e[0] ])
 #     results, missing_chapters = load_issue_dicts(MAIN_PATH + "first_1891_issues", ids)
 #     for k, v in missing_chapters.items():
 #         print("{0}: {1}, {2}".format(k, len(v), v))
