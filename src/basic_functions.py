@@ -4,10 +4,10 @@ Created on Mar 16, 2018
 @author: zburchill
 '''
 import urllib.parse
-import pickle
 import logging, os, random, functools, shelve, threading
 import io # for loading images
 from warnings import warn
+import pickle, json, csv, os, shutil # for the PersistentDict
 
 ### TO-DO: make sure all the PageScrapeExceptions in the code have the new arugments
 
@@ -26,8 +26,6 @@ def load_obj(name ):
     with open(name + '.pkl', 'rb') as f:
         return pickle.load(f)     
 
-
-
 # Turns navigable strings to normal ones
 def get_string(soup_element):
     """ returns a bs4 element's NavigableString as a normal one """
@@ -45,17 +43,102 @@ def join_urls(base, url, allow_fragments=True):
 
 
 # ------------------------------ General saving functions ------------------------------------------ #
+
+
+
+# from: https://code.activestate.com/recipes/576642/
+# Because normal shelves suck
+class PersistentDict(dict):
+    ''' Persistent dictionary with an API compatible with shelve and anydbm.
+
+    The dict is kept in memory, so the dictionary operations run as fast as
+    a regular dictionary.
+
+    Write to disk is delayed until close or sync (similar to gdbm's fast mode).
+
+    Input file format is automatically discovered.
+    Output file format is selectable between pickle, json, and csv.
+    All three serialization formats are backed by fast C implementations.
+
+    '''
+
+    def __init__(self, filename, flag='c', mode=None, format='json', *args, **kwds):
+        self.flag = flag                    # r=readonly, c=create, or n=new
+        self.mode = mode                    # None or an octal triple like 0644
+        self.format = format                # 'csv', 'json', or 'pickle'
+        self.filename = filename
+        if flag != 'n' and os.access(filename, os.R_OK):
+            fileobj = open(filename, 'rb' if format=='pickle' else 'r')
+            with fileobj:
+                self.load(fileobj)
+        dict.__init__(self, *args, **kwds)
+
+    def sync(self):
+        'Write dict to disk'
+        if self.flag == 'r':
+            return
+        filename = self.filename
+        tempname = filename + '.tmp'
+        fileobj = open(tempname, 'wb' if self.format=='pickle' else 'w')
+        try:
+            self.dump(fileobj)
+        except Exception:
+            os.remove(tempname)
+            raise
+        finally:
+            fileobj.close()
+        shutil.move(tempname, self.filename)    # atomic commit
+        if self.mode is not None:
+            os.chmod(self.filename, self.mode)
+
+    def close(self):
+        self.sync()
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc_info):
+        self.close()
+
+    def dump(self, fileobj):
+        if self.format == 'csv':
+            csv.writer(fileobj).writerows(self.items())
+        elif self.format == 'json':
+            json.dump(self, fileobj, separators=(',', ':'))
+        elif self.format == 'pickle':
+            pickle.dump(dict(self), fileobj, 2)
+        else:
+            raise NotImplementedError('Unknown format: ' + repr(self.format))
+
+    def load(self, fileobj):
+        # try formats from most restrictive to least restrictive
+        for loader in (pickle.load, json.load, csv.reader):
+            fileobj.seek(0)
+            try:
+                return self.update(loader(fileobj))
+            except Exception:
+                pass
+        raise ValueError('File not in a supported format')
+
+
+
+
+
+
 class save_progress(object):
     """ Caches the key-value output of a function call, saving the whole thing to file every `n` calls,
     and then clearing out the RAM-intensive part of the cache.
     Uses `shelve` to store stuff. """
     
-    def __init__(self, filename, f, save_after_n, make_new=False):
+    def __init__(self, filename, f, save_after_n, make_new=False, use_regular_shelf=False):
         self._f = f
         self._save_after = save_after_n
         if make_new:
             os.remove(filename)
-        self._shelf = shelve.open(filename)
+        if use_regular_shelf:
+            self._shelf = shelve.open(filename)
+        else:
+            self._shelf = shelve.Shelf(PersistentDict(filename, 'c', format='json'))
         self.filename = filename
         
         # Not affected by args:
