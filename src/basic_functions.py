@@ -119,6 +119,9 @@ class PersistentDict(dict):
             except Exception:
                 pass
         raise ValueError('File not in a supported format')
+    
+    def to_dict(self):
+        return(dict(self))
 
 
 
