@@ -138,7 +138,7 @@ class save_progress(object):
         if use_regular_shelf:
             self._shelf = shelve.open(filename)
         else:
-            self._shelf = shelve.Shelf(PersistentDict(filename, 'c', format='json'))
+            self._shelf = PersistentDict(filename, 'c', format='json')
         self.filename = filename
         
         # Not affected by args:
@@ -155,7 +155,7 @@ class save_progress(object):
             self.sync_dict()
             self._n = 0
         with self._data_lock:
-            print(self._f(*args, **kwargs))
+#             print(self._f(*args, **kwargs))
             k, v = self._f(*args, **kwargs)
             self._c +=1
             self.data[k] = v
