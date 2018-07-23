@@ -532,6 +532,9 @@ def metadata_task(soup):
     # the metadata dictionary
     m_d = {}
     try:
+        # Holy shit, I didn't get fucking titles
+        m_d["title"] = get_string(soup.find('span', {'class': ['releasestitle', 'tabletitle']})).strip()
+        
         # Let's turn those categories into useable data
         m_d["genre"] = clean_genre_category(category_dict["Genre"])
         m_d["categories"] = clean_categories_category(category_dict["Categories"])
