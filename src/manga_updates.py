@@ -844,15 +844,15 @@ if __name__ == "__main__":
     global METADATA_BOOL
     global LIST_OF_IDS_TO_USE 
      
-    START_OVER = True
-    METADATA_BOOL = True # if False, it runs the issue_task
+    START_OVER = False
+    METADATA_BOOL = False # if False, it runs the issue_task
     # If you don't want to use, just set to None
     
     # loading broken stuff
 #     errs = load_obj("errors")
 #     errs[:] = [e[1] for e in errs]
     
-    LIST_OF_IDS_TO_USE = None #load_obj(MAIN_PATH + "all_series_ids")[0:100]    #get_ids_from_db(MAIN_PATH + "first_1891", VALID_ID_FILE)
+    LIST_OF_IDS_TO_USE = [e[1] for e in load_obj("errors")]            #load_obj(MAIN_PATH + "all_series_ids")[0:100]    #get_ids_from_db(MAIN_PATH + "first_1891", VALID_ID_FILE)
  
     metadata_saver = save_progress(MAIN_PATH + "everything_json.json", save_progress.identity, save_after_n=200)
     issue_task_saver = save_progress(MAIN_PATH + "everything_json_issues.json", save_progress.identity, save_after_n=200)
