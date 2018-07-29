@@ -185,8 +185,8 @@ def get_soup_row_list(soup_obj):
     rows = list(table.find_all("tr"))
     # Get rid of the blank / "An asterisk (*) denotes series information..." rows
     rows = [e for e in rows if "colspan" not in e.td.attrs]
-    # Drop the title row and drop the empty first row
-    return(rows[2:])
+    # Drop the title row! (empty first row should already be dropped)
+    return(rows[1:])
 def soup_row_to_string_list(soup_row):
     """
     Turns the values in row of updates (bs4 element) into a list of strings if they aren't already
