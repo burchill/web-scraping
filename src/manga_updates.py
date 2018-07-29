@@ -13,13 +13,9 @@ import threading
 from queue import Queue
 from basic_functions import PageScrapeException, BadPageException, ninja_soupify_simpler, remove_duplicate_elements,\
     clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify, load_obj, save_obj
-from load_for_r import get_ids_from_db
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
-from string import ascii_uppercase
-from itertools import combinations_with_replacement
-
 from functools import wraps, partial # for the decorators
 
 from time import sleep # ehhh
@@ -627,6 +623,8 @@ def get_issue_info_from_table(soup_obj, manga_id, expected_number_of_columns=5):
     string_rows_list = [soup_row_to_string_list(e) for e in soup_rows]
     # Add in the manga id
     string_rows_list[:] = [e+[manga_id] for e in string_rows_list]
+    if (not string_rows_list):
+        raise PageScrapeException(message=str(manga_id) + " doesn't have ANY rows! Shouldn't happen!")
     # If the first row doesn't have the right amount of columns...
     # it's probably a page with no updates, so don't return anything
     if len(string_rows_list[0]) == expected_number_of_columns + 1:
