@@ -7,7 +7,7 @@ import urllib.parse
 import logging, os, random, functools, shelve, threading
 import io # for loading images
 from warnings import warn
-import pickle, json, csv, os, shutil # for the PersistentDict
+import pickle, json, csv, shutil # for the PersistentDict
 
 ### TO-DO: make sure all the PageScrapeExceptions in the code have the new arugments
 
