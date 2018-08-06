@@ -123,11 +123,6 @@ class PersistentDict(dict):
     def to_dict(self):
         return(dict(self))
 
-
-
-
-
-
 class save_progress(object):
     """ Caches the key-value output of a function call, saving the whole thing to file every `n` calls,
     and then clearing out the RAM-intensive part of the cache.
@@ -149,8 +144,6 @@ class save_progress(object):
         self._data_lock = threading.Lock() # I don't think I technically need a lock for editing a dictionary
         self._n = 0
         self.data = {}
-        self._c = 0 # For tracking stuff rulllll good, counts when values are added in the call
-        self._c2 = 0 # For tracking stuff rulllll good, counts how many keys are added to the shelf
 
     def __call__(self, *args, **kwargs):
         # If it needs to sync/save
@@ -158,9 +151,7 @@ class save_progress(object):
             self.sync_dict()
             self._n = 0
         with self._data_lock:
-#             print(self._f(*args, **kwargs))
             k, v = self._f(*args, **kwargs)
-            self._c +=1
             self.data[k] = v
         self._n += 1
             
@@ -179,33 +170,22 @@ class save_progress(object):
     def shelve_dict(self, d):
         """ Adds all items in the dict cache to the shelf """
         for k, v in d.items():
-            self._c2 += 1
             if k in self._shelf:
-                print("MMMMMMMMMMMMMMMMMMM")
-                print("{0} {1}".format(k,v))
+                warn("{0}: {1} already in {2}".format(k, v, self.filename))
             try:
                 self._shelf[k] = v
             except AttributeError as error_m:
-                print("HHHHHHHHHHHHHHHHHH")
-                print("{0} {1} has: {2}".format(k,v,error_m))
+                warn("{0} {1} has: {2}".format(k, v, error_m))
         
     def close(self):
-        print("BBBBBBBUUUUUUUUT: "+str(self._c))
-        print("BBBBBBBUUUUUUUUT: "+str(self._c2))
         self.sync_dict()
         print("THE SAVED PROGRESS HAS {!s} ENTRIES---------------".format(len(self._shelf.items())))
-        print("BBBBBBBUUUUUUUUT: "+str(self._c))
-        print("BBBBBBBUUUUUUUUT: "+str(self._c2))
         self._shelf.close()
     
     @staticmethod
     def identity(e):
         """ for functions that already output a key value tuple """
         return(e)
-
-# saver_1 = save_progress("/Users/zburchill/Desktop/delete", save_progress.identity, 10)
-# saver_1(("key", "value1")) # etc
-
 
 
 # ------------------------------ General loading / internet functions ------------------------------ #
