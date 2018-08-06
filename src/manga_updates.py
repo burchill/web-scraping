@@ -264,10 +264,6 @@ def get_all_categories(soup_obj):
             warn("Already a category named"+name+", overriding.")
         d[name] = get_next_sibling_tag(category)
     return(d)
-        
-
-
-    
 
 
 #######################  Data processing functions ########################################################
@@ -706,8 +702,8 @@ def main():
         if LIST_OF_IDS_TO_USE:
             manga_ids = LIST_OF_IDS_TO_USE
         else: # otherwise get the remaining ones
-            manga_ids = list(set(load_obj(MAIN_PATH + "remaining")))
-            try: Error_list = load_obj(MAIN_PATH + "errors")
+            manga_ids = list(set(load_obj(DATA_PATH + "remaining")))
+            try: Error_list = load_obj(DATA_PATH + "errors")
             except FileNotFoundError: 
                 warn("The file containing the errors does not exist")
                 
@@ -785,7 +781,7 @@ def main():
 # Sees what was done and what wasn't, and saves some files
 # Issue info should probably be processed again after the fact to make sure all the pages were collected right
 def close_up(finished_ids, original_ids, errors):
-    global MAIN_PATH
+    global DATA_PATH
     original_ids = set(original_ids)
     weirdo_list = []
     if len(set(finished_ids)) != len(finished_ids):
@@ -799,8 +795,8 @@ def close_up(finished_ids, original_ids, errors):
     if weirdo_list:
         print("Oddly, these manga were supposed to have been logged, but weren't in the set of ids used:")
         print(weirdo_list)
-    save_obj(original_ids, MAIN_PATH + "remaining")
-    save_obj(errors, MAIN_PATH + "errors")
+    save_obj(original_ids, DATA_PATH + "remaining")
+    save_obj(errors, DATA_PATH + "errors")
            
 
 
@@ -808,8 +804,10 @@ def define_global_variables():
     # Global Constants
     global MAIN_PATH
     MAIN_PATH = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
+    global DATA_PATH
+    DATA_PATH = MAIN_PATH + "../data/manga_project/"
     global VALID_ID_FILE
-    VALID_ID_FILE = MAIN_PATH + "new_series_ids" # leave off the .pkl
+    VALID_ID_FILE = DATA_PATH + "new_series_ids" # leave off the .pkl
     global NUM_THREADS 
     NUM_THREADS = 100
     global NUMBER_OF_NONALPHA_MANGA_PAGES # the number of pages of manga that don't begin with letters we have to scroll through 
@@ -837,7 +835,7 @@ def define_global_variables():
 
 if __name__ == "__main__":
     define_global_variables()
-    global MAIN_PATH
+    global DATA_PATH
     
     # Change to control behavior:
     global START_OVER
@@ -852,10 +850,10 @@ if __name__ == "__main__":
 #     errs = load_obj("errors")
 #     errs[:] = [e[1] for e in errs]
     
-    LIST_OF_IDS_TO_USE = [e[1] for e in load_obj("errors")]            #load_obj(MAIN_PATH + "all_series_ids")[0:100]    #get_ids_from_db(MAIN_PATH + "first_1891", VALID_ID_FILE)
+    LIST_OF_IDS_TO_USE = [e[1] for e in load_obj("errors")]            #load_obj(DATA_PATH + "all_series_ids")[0:100]    #get_ids_from_db(DATA_PATH + "first_1891", VALID_ID_FILE)
  
-    metadata_saver = save_progress(MAIN_PATH + "everything_json.json", save_progress.identity, save_after_n=200)
-    issue_task_saver = save_progress(MAIN_PATH + "everything_json_issues.json", save_progress.identity, save_after_n=200)
+    metadata_saver = save_progress(DATA_PATH + "everything_json.json", save_progress.identity, save_after_n=200)
+    issue_task_saver = save_progress(DATA_PATH + "everything_json_issues.json", save_progress.identity, save_after_n=200)
     ninja_soupify = ninja_soupify_simpler(SWITCH_PROXIES_AFTER_N_REQUESTS)
     nsap = partial(ninja_soupify_and_pass, ninja_soupify) 
 

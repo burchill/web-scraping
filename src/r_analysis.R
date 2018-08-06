@@ -33,13 +33,21 @@ stopifnot(rlang::is_installed("lubridate"))
 
 
 ######################################
-############# Functions
+############# Basic Functions
 ########################################
 
 is_oneshot <- function(x) {
   grepl("one[- ]*shot", tolower(x))
 }
 
+find_oneshots <- function(df) {
+  df %>%
+    group_by(SeriesID) %>%
+    mutate(n=n()) %>%
+    ungroup() %>%
+    filter(n==1) %>%
+    filter(is_oneshot(Chapter))
+}
 
 df_rower <- function(x,name) {
   name <- rlang::enquo(name)
@@ -52,37 +60,23 @@ filter_by_row <- function(.data, ...) {
   .data %>% rowwise() %>% filter(...) %>% ungroup()
 }
 
-# I don't quite remember what this does...
-apply_f <- function(df, f, subset_vars=FALSE) {
-  if (is.logical(subset_vars)) {
-    df %>% bind_cols(map_df(.$data, ~map(., f)))
-  } else {
-    df %>% bind_cols(
-      map_df(.$data, 
-             ~map(set_names(.[subset_vars], subset_vars), 
-                  f)))
-  }}
-
-#########################
+#####  Loading the data   ####################
 
 main_path = "/Users/zburchill/Documents/workspace2/web-scraping/src/"
 metadata_db_file = "everything_json.json"
+issues_db_file   = "everything_json_issues_slimmed.json"
 # issue_db_file = "first_1891_issues"
 
 metadata_list <- fromJSON(paste0(main_path, metadata_db_file), flatten=FALSE)
-
-
-
+issues_list <-   fromJSON(paste0(main_path, issues_db_file), flatten=FALSE)
 
 # Turns the issues list into a data frame
 make_issue_dataframe <- function(l) {
   df <- l %>%
-    purrr::keep(~length(.) < 100) %>% # filter out weirdos
+    purrr::keep(~length(.) < 100) %>% # filter out weirdos if there are any
     purrr::imap_dfr(function(series, series_id) {
       purrr::imap_dfr(series, function(page, pagenum){
-        purrr::map_dfr(page, function(release) {
-          as.data.frame(t(release), stringsAsFactors=FALSE)
-        }) %>%
+        as_tibble(page) %>%
           mutate(PageNumber = pagenum)
       }) %>%
         mutate(SeriesID = series_id)
@@ -92,11 +86,95 @@ make_issue_dataframe <- function(l) {
               Volume = V3,
               Chapter = V4,
               Groups = V5,
-              PageNumber, SeriesID) %>%
-    filter(!is.na(Date))
+              DateString = V1,
+              PageNumber, SeriesID)
 } 
-issue_df <- make_issue_dataframe(issue_dict)
 
+# Turns a single series row into a df (use it in a map function)
+make_single_series_dataframe <- function(series, series_id) {
+  df <- series %>% 
+    purrr::map(function(v) {
+      if (length(v) == 0) NULL
+      else if (length(v) == 1 && trimws(v) == "N/A") NULL
+      else  v }) %>%
+    purrr::imap_dfc(~df_rower(.x, !! .y)) 
+  if (is.null(df$categories[[1]])) {
+    # If there are no categories, the recs should have "N/A"
+    stopifnot(length(df$category_recs[[1]]) == 1 &&
+                grepl("N/A", df$category_recs[[1]]))
+    df$category_recs <- NULL
+  }
+  df %>% mutate(SeriesID = series_id)
+}
+
+# Turns the metadata list into a data frame
+make_metadata_dataframe <- function(l) {
+  len <- length(l)
+  # Remove anything that isn't just a oneshot
+  l <- l %>% keep(~("regulars" %in% names(.$status)))
+  message(paste0("Removed ", len-length(l), " oneshot series"))
+  
+  len2 <- length(l)
+  # Remove anything related to Anthologies
+  l <- l %>% purrr::keep(~!("Anthology" %in% .$artists) &
+                      !("Anthology" %in% .$authors))
+  message(paste0("Removed ", len2-length(l), " anthology series"))
+  
+  l %>%
+    purrr::imap_dfr(function(series, series_id) {
+      make_single_series_dataframe(series, series_id)})
+}
+
+md_df <- make_metadata_dataframe(metadata_list)
+
+issue_df <- make_issue_dataframe(issues_list)
+
+issue_one_shots <- find_oneshots(issue_df)
+
+issue_df %>%
+  filter(!is.na(Date)) %>%
+  group_by(Title, Groups) %>%
+  arrange(Title, Groups, Date) %>%
+  mutate(seq = as.numeric(lead(Date)-Date)) %>%
+  filter(!is.na(seq)) %>%
+  mutate(n = n() ) %>%
+  ungroup() %>%
+  filter(n > 10) %>%
+  filter(seq <  60) %>%
+  ggplot(aes(x=seq, group=paste0(Title, Groups))) + 
+  geom_density(alpha=0.2)
+  
+
+
+
+
+issue_df %>% 
+  filter(!is.na(Date)) %>%
+  group_by(SeriesID) %>%
+  arrange(SeriesID, Date) %>%
+  mutate(s = seq_along(Date)) %>%
+  ungroup() %>%
+  ggplot(aes(x=Date,y=s,color=SeriesID)) +
+  geom_line() +
+  scale_color_discrete(guide=FALSE)
+
+
+issue_df %>%
+  filter(!is.na(Date)) %>%
+  group_by(Title, Groups, SeriesID) %>%
+  arrange(Title, Groups, Date) %>%
+  mutate(seq = as.numeric(lead(Date)-Date)) %>%
+  filter(!is.na(seq)) %>%
+  mutate(n = n() ) %>%
+  filter(n > 10) %>%
+  summarise(m = Mode(seq)) %>%
+  ungroup() %>%
+  arrange(-m)
+  
+Mode <- function(x) {
+  ux <- unique(x)
+  ux[which.max(tabulate(match(x, ux)))]
+}
 
 
 
@@ -147,41 +225,9 @@ clean_metadata <- function(df) {
 }
 
 
-make_single_series_dataframe <- function(series, series_id) {
-  df <- series %>% 
-    purrr::map(function(v) {
-      if (length(v) == 0) NULL
-      else if (length(v) == 1 && trimws(v) == "N/A") NULL
-      else  v }) %>%
-    purrr::imap_dfc(~df_rower(.x, !! .y)) 
-  if (is.null(df$categories[[1]])) {
-    # If there are no categories, the recs should have "N/A"
-    stopifnot(length(df$category_recs[[1]]) == 1 &&
-                grepl("N/A", df$category_recs[[1]]))
-    df$category_recs <- NULL
-  }
-  df %>% mutate(SeriesID = series_id)
-}
 
 
-
-make_metadata_dataframe <- function(l) {
-  len <- length(l)
-  # Remove anything that isn't just a oneshot
-  l <- l %>% keep(~!("regulars" %in% names(.$status)))
-  message(paste0("Removed ", len-length(l), " oneshot series"))
-  
-  len2 <- length(l)
-  # Remove anything related to Anthologies
-  l %>% purrr::keep(~!("Anthology" %in% .$artists) &
-                 !("Anthology" %in% .$authors)) %>%
-    purrr::imap_dfr(function(series, series_id) {
-      tibble(SeriesID = series_id,
-             data = list(series)) })
-  message(paste0("Removed ", len2-nrow(df), " anthology series"))
-}
-
-md_df <-make_metadata_dataframe(metadata_list)
+md_df <- make_metadata_dataframe(metadata_list)
 df.n <- md_df %>%
   bind_cols(map_df(.$data, ~map(., length))) %>%
   select(-data)
