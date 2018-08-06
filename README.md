@@ -2,6 +2,13 @@
 
 This is (most) of the code of my personal web-scraping Python projects.  Feel free to use the source code to learn from, but if you borrow stuff, please source me.
 
+## Warning
+
+This code is mostly for me. That means I'm still working on it, playing around with it, and I understand things about it that you, a stranger, may not.  Although I "try" to document things and be clear, do not assume any of the code works in the way that you think it will.
+
+
+## Note:
+
 Additionally, much of this code is aimed at scraping _particular_ websites, so please **do not start running stuff willy-nilly.** For example, if you want the data from the website I scraped for the `manga_updates.py`/`manga_project` project, please 
 just help yourself to what I've collected (`everything_json.json` and `everything_json_issues_slimmed.json`). 
 
