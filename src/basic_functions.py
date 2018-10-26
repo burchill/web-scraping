@@ -33,6 +33,44 @@ def get_string(soup_element):
         return(str(soup_element.string))
     else:
         return("")
+    
+# Outputs a normal string,
+def get_full_string(soup_obj, start_index=None, end_index=None):
+    """
+    Concatenates all the strings of an element into a single string. 
+    
+    By default, returns the entire string. You can specify start and end indices.
+    """
+    string_list = list(soup_obj.strings)
+    # Automatically converts to a normal string, I believe
+    string_temp = "".join(string_list[start_index:end_index])
+    return(string_temp)
+
+def get_strings(soup_obj, remove_empty=False, stripped=True):
+    """
+    Returns a list of all the strings in a soup object, with the option to remove empty strings
+    """
+    if stripped: strings = [str(e) for e in soup_obj.stripped_strings]
+    else:        strings = [str(e) for e in soup_obj.strings]
+    if remove_empty: return [e for e in strings if e.strip() != ""]
+    else: return strings 
+    
+def break_strings_by_line(soup_obj):
+    """ 
+    Returns a list of all the strings in a soup object, concatenated into lines
+    """
+    big_l = []
+    temp_l = []
+    for child in soup_obj.children:
+        if child.name == "br":
+            if temp_l:
+                big_l+=["".join(temp_l)]
+                temp_l = []
+        else:
+            if get_string(child).strip(): temp_l += [ get_string(child) ]
+    if temp_l: big_l+= ["".join(temp_l)]
+    return(big_l)
+
 
 def remove_duplicate_elements(l):
     """ Right now, just `list(set(l))` """

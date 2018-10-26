@@ -12,7 +12,7 @@ import re
 import threading
 from queue import Queue
 from basic_functions import PageScrapeException, BadPageException, ninja_soupify_simpler, remove_duplicate_elements,\
-    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify, load_obj, save_obj
+    clean_find, get_string, save_progress, ninja_soupify_and_pass, soupify, load_obj, save_obj, get_full_string, get_strings
 from bs4 import Tag
 from warnings import warn
 from bs4.element import NavigableString
@@ -141,41 +141,6 @@ def get_next_sibling_tag(tag):
         else:
             next_thing = next_thing.next_sibling
     return(next_thing)
-
-# Outputs a normal string
-def get_full_string(soup_obj, start_index=None, end_index=None):
-    """
-    Concatenates all the strings of an element into a single string. 
-    
-    By default, returns the entire string. You can specify start and end indices.
-    """
-    string_list = list(soup_obj.strings)
-    string_temp = "".join(string_list[start_index:end_index])
-    return(string_temp)
-
-def get_strings(soup_obj, remove_empty=False):
-    """
-    Returns a list of all the strings in a soup object, with the option to remove empty strings
-    """
-    strings = [str(e).strip() for e in soup_obj.strings]
-    if remove_empty: return [str(e).strip() for e in strings if e != ""]
-    else: return strings 
-    
-def break_strings_by_line(soup_obj):
-    """ 
-    Returns all the strings in a soup object, concatenated by lines
-    """
-    big_l = []
-    temp_l = []
-    for child in soup_obj.children:
-        if child.name == "br":
-            if temp_l:
-                big_l+=["".join(temp_l)]
-                temp_l = []
-        else:
-            if get_string(child).strip(): temp_l += [ get_string(child) ]
-    if temp_l: big_l+= ["".join(temp_l)]
-    return(big_l)
 
 def get_soup_row_list(soup_obj):
     """
