@@ -16,6 +16,7 @@ from bs4 import BeautifulSoup # https://www.crummy.com/software/BeautifulSoup/bs
 from PIL import Image  # Use "Pillow"! http://pillow.readthedocs.io/en/latest/installation.html
 import requests # http://docs.python-requests.org/en/latest/user/install/#install
 
+import re, time
 
 # ------------------------------ Real basic functions ------------------------------ #
 # Loading and saving pickled stuff
@@ -78,6 +79,11 @@ def remove_duplicate_elements(l):
 
 def join_urls(base, url, allow_fragments=True):
     return(urllib.parse.urljoin(base, url, allow_fragments))
+
+def get_filename_from_url(url):
+    path = urllib.parse.urlsplit(url).path
+    _, basename = os.path.split(path)
+    return(basename)
 
 
 # ------------------------------ General saving functions ------------------------------------------ #
@@ -230,11 +236,13 @@ class save_progress(object):
 
 # A generic custom exception so that I know when a failed to load properly or image failed to `Image.save()`
 class PageScrapeException(Exception):
+    "A generic custom exception so that I know when a failed to load properly or image failed to `Image.save()`"
     def __init__(self, message, url="NotGiven"):
         self.expression = url
         self.message = message
 # For when I want to say that this page shouldn't be scraped again, basically
 class BadPageException(Exception):
+    "For when I want to say that this page shouldn't be scraped again, basically"
     def __init__(self, message, identifier="NotGiven"):
         self.expression = identifier
         self.message = message
@@ -314,6 +322,35 @@ def soupify(url, safer=False, **kwargs):
     soup = BeautifulSoup(response_for_url.text)
     # turns the page into a soup object
     return(soup)
+
+# Uses selenium and ChromeDriver (path hardcoded to '../chromedriver')
+def js_soupify(url, title_text = None, wait_time = 10, chromedriver_path = '../chromedriver'):
+    """ 
+    A facsimile of soupify for tricking simple javascript-requiring sites, like those that use cloudflare.
+    Essentially it uses selenium and ChromeDriver and opens up the url, optionally waits, and then downloads the HTML.
+    If `title_text` is set, it will wait `wait_time` seconds checking if the title of the page 
+        contains that text, and if it never does, it throws an error.
+    """
+    from selenium import webdriver
+    from selenium.webdriver.support import expected_conditions as EC
+    from selenium.webdriver.support.ui import WebDriverWait
+    
+    options = webdriver.ChromeOptions()
+    options.add_argument('headless')
+    driver = webdriver.Chrome(chromedriver_path, chrome_options = options)  # Optional argument, if not specified will search path.
+    driver.get(url)
+    
+    if title_text is not None:
+        WebDriverWait(driver, wait_time).until(
+            EC.title_contains(title_text)
+        )
+        if not EC.title_contains(title_text):
+            actual_title = driver.find_element_by_id("title").text
+            raise BadPageException("Title '{}' did not contain '{}' in alotted time ({})".format(actual_title, title_text, url))
+    
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    driver.quit()
+    return(soup) 
 
 # So, you can also pass a FUNCTION as an argument to `soup.find()` to search the tree
 # This function just makes it so that it puts the arguments in `soup.find()` in the right way
@@ -427,10 +464,11 @@ class ninja_soupify_simpler(object):
     This class basically serves as a function that stores proxy information and rotates
     through using different ones while using `soupify()`. """
     
-    def __init__(self, switch_proxies_after_n_calls):
+    def __init__(self, switch_proxies_after_n_calls, text_counts_as_ban=None):
         self.switch_after_n = switch_proxies_after_n_calls
         self.numcalls = self.proxy_index = 0
         self.proxies = self.get_proxies()
+        self.bantext = text_counts_as_ban
         
     def __call__(self, url, tolerance=10, **kwargs):
         self.numcalls += 1
@@ -446,9 +484,12 @@ class ninja_soupify_simpler(object):
             if self.proxy_index >= len(self.proxies):
                 self.proxy_index = self.get_random_proxy_index()
             # Make a dict that Requests can use
-            proxy = { "https": "http://{ip}:{port}".format(**self.proxies[self.proxy_index]) }
+            # Used to be: proxy = { "https": "http://{ip}:{port}".format(**self.proxies[self.proxy_index])}
+            proxy = { "https": "http://{ip}:{port}".format(**self.proxies[self.proxy_index])}
             try:
                 r = soupify(url, proxies = proxy, **kwargs)
+                if self.bantext is not None and self.bantext in r.text:
+                    raise requests.exceptions.SSLError("MYEH")
                 return(r)
             # If the proxy doesn't work:
             except (requests.exceptions.SSLError, requests.exceptions.ProxyError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
@@ -482,4 +523,155 @@ class ninja_soupify_simpler(object):
 # print(ninja_soupify("https://google.com"))
 
 
+class Proxifier(object):
+    def __init__(self, proxsup, switch_proxies_after_n_calls=15,
+                 n_proxies_on_deck = 10, raise_err_fn = None,
+                 min_sleep = 0):
+        self.switch_after_n = switch_proxies_after_n_calls
+        self.numcalls = self.proxy_index = 0
+        self.ps = proxsup
+        self.proxies = self.ps.get_proxies()
+        self.wait_for_new_proxies = 20
+        self.n_on_deck = n_proxies_on_deck
+        self._i_got_this = False
+        self.err_fn = (lambda x: None) if raise_err_fn is None else raise_err_fn
+        self.min_sleep = min_sleep
+        self._lock = threading.Lock() # for deleting proxies
+    
+    def delete_proxy(self, proxy):
+        with self._lock:
+            if proxy in self.proxies:
+                del self.proxies[self.proxies.index(proxy)]  
+        self.get_random_proxy_index()
+    
+    def get_more_proxies(self):
+        if self._i_got_this:
+            return()
+        self._i_got_this = True
+        try:
+            self.proxies += self.ps.get_proxies()
+        finally:
+            self._i_got_this = False
+        
+    def wait_for_more_proxies(self):
+        "Makes sure no thread is already getting more proxies, and waits for them"
+        if not self._i_got_this:
+            self.get_more_proxies()
+            if not self.proxies:
+                raise Exception("Tried to get more proxies, but couldn't!")
+            else:
+                return(None)
+        c = self.wait_for_new_proxies
+        while c > 0 and not self.proxies:
+            time.sleep(1)
+        if not self.proxies: 
+            raise Exception("Waited for {} s for proxies but none came".format(self.wait_for_new_proxies))
+        else:
+            return(None)
 
+    def __call__(self, url, tolerance=10, **kwargs):
+        time.sleep(self.min_sleep)
+        
+        self.numcalls += 1
+        if self.numcalls % self.switch_after_n == 0:
+            self.proxy_index = self.get_random_proxy_index()  
+                  
+        dead_proxy_count = 0
+        # if you burn through too many proxies, there's probably a problem
+        while dead_proxy_count <= tolerance:
+            
+            if len(self.proxies) < self.n_on_deck and not self._i_got_this:
+                self.get_more_proxies()
+            
+            # If for some reason there isn't a proxies list, make one   
+            if len(self.proxies) == 0:
+                self.wait_for_more_proxies()    
+                
+            # If the proxy index needs to be updated
+            if self.proxy_index >= len(self.proxies):
+                self.proxy_index = self.get_random_proxy_index()
+            
+            # Make a dict that Requests can use
+            proxy_dict = self.proxies[self.proxy_index]
+            # Used to be: proxy = { "https": "http://{ip}:{port}".format(**self.proxies[self.proxy_index])}
+            proxy = { "https": "http://{ip}:{port}".format(**proxy_dict)}
+            
+            try:
+                r = soupify(url, proxies = proxy, **kwargs)
+                self.err_fn(r) # should raise BadPageException
+                return(r)
+            
+            # If the proxy doesn't work:
+            except (requests.exceptions.SSLError, requests.exceptions.ProxyError, 
+                    requests.exceptions.ConnectionError, requests.exceptions.Timeout,
+                    requests.exceptions.HTTPError, BadPageException) as err:
+                s = "Proxy {p} deleted because of: {error_m!s}".format(p=proxy["https"], error_m=err)
+                warn(s)
+                self.delete_proxy(proxy_dict)
+                dead_proxy_count += 1
+            
+        raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
+        
+    def get_random_proxy_index(self):
+        "Return a random index from the proxy list"
+        if len(self.proxies) == 0:
+            self.wait_for_more_proxies()
+        return random.randint(0, len(self.proxies) - 1)
+
+
+class ProxySupplier(object):
+    def __init__(self, url):
+        self.proxy_url = url
+    
+    def rows_from_soup(self, soup_obj):
+        return(soup_obj.tbody.find_all("tr"))
+    
+    def proxy_from_row(self, row_soup_obj):
+        proxy = {
+            'ip':   row_soup_obj.find_all('td')[0].string,
+            'port': row_soup_obj.find_all('td')[1].string
+            }
+        return(proxy)
+    
+    def _get_proxies(self, soup_obj):
+        proxies = []
+        for row in self.rows_from_soup(soup_obj):
+            proxies.append(self.proxy_from_row(row))
+        return(proxies)
+        
+    def get_proxies(self, **kwargs):
+        soup = soupify(self.proxy_url, **kwargs)
+        proxies = self._get_proxies(soup)
+        return(proxies)
+        
+class HideMyNamePS(ProxySupplier):
+    def __init__(self, url="https://hidemyna.me/en/proxy-list/?type=hs&anon=4"):
+        self.proxy_url = url
+        self.og_url = url
+    
+    def get_proxies(self):
+        soup = js_soupify(self.proxy_url, title_text="Free")
+        proxies = self._get_proxies(soup)
+        arrow = clean_find(soup, ['li',{'class': 'arrow__right'}])
+        if arrow is None:
+            self.proxy_url = self.og_url
+            warn("HideMyNamePS going back to original URL")
+        else:
+            self.proxy_url="https://hidemyna.me"+arrow.a["href"]
+        return(proxies)
+
+
+# print(HideMyNamePS().get_proxies())
+# 
+# 
+# SSLProxies = ProxySupplier('https://www.sslproxies.org/')        
+# HideMyName = ProxySupplier('https://hidemyna.me/en/proxy-list/?type=hs&anon=4',
+#                            count_fn = hidemyname_pager)
+# 
+#     
+
+
+
+
+    
+    
