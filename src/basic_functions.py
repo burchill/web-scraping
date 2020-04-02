@@ -8,11 +8,13 @@ import logging, os, random, functools, shelve, threading
 import io # for loading images
 from warnings import warn
 import pickle, json, csv, shutil # for the PersistentDict
+# for checking changes
+import hashlib
 
 ### TO-DO: make sure all the PageScrapeExceptions in the code have the new arugments
 
 #--------- These are the non-standard libraries ---------#
-from bs4 import BeautifulSoup # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#installing-beautiful-soup
+from bs4 import BeautifulSoup, NavigableString # https://www.crummy.com/software/BeautifulSoup/bs4/doc/#installing-beautiful-soup
 from PIL import Image  # Use "Pillow"! http://pillow.readthedocs.io/en/latest/installation.html
 import requests # http://docs.python-requests.org/en/latest/user/install/#install
 
@@ -26,6 +28,71 @@ def save_obj(obj, name ):
 def load_obj(name ):
     with open(name + '.pkl', 'rb') as f:
         return pickle.load(f)     
+
+# Saves a dictionary as a JSON file
+def save_dict(d, path):
+    fileobj = open(path,'w')
+    try:
+        json.dump(d, fileobj, separators=(',', ':'))
+    except Exception:
+        os.remove(path)
+        raise
+    finally:
+        fileobj.close()
+# Loads a json file
+def load_dict(path):
+    with open(path,'r') as f:
+        res = json.load(f)
+    return(res)
+# Make a directory if it does not exist
+def thread_safe_mkdir(path):
+    if not os.path.exists(path):
+        try:
+            os.mkdir(path)
+        except FileExistsError:
+            pass
+# Get's a list of files/directories
+# Ignores .DS_Store files by default
+def get_dirlist(path, avoid = [".DS_Store"]):
+    objs = os.listdir(path)
+    return([e for e in objs if e not in avoid])
+def get_dirname(path, dir_check=True):
+    ''' Strips off the full path of a directory, leaving only the folder name '''
+    path = os.path.normpath(path)
+    if dir_check and not os.path.isdir(path):
+        raise AssertionError(path+" does not exist!") 
+    return os.path.basename(path)
+def n_parent_dir(path, n=1):
+    ''' Goes up a directory '''
+    path = os.path.normpath(path)
+    for _ in range(n):
+        path = os.path.dirname(path)
+    return path
+
+def make_hash(hash_file_path):
+    hashval = get_hash_of_file(hash_file_path)
+    with open(hash_file_path, "w") as f:
+        f.write(hashval)
+    
+def check_if_hash_changed(hash_file_path):
+    cur_hash = get_hash_of_file(hash_file_path)
+    with open(hash_file_path+".hash") as f:
+        old_hash = f.read()
+    return(cur_hash != old_hash)
+
+def get_hash_of_file(file_path):
+    with open(file_path, "r") as f:
+        s = f.read()
+    md5 = hashlib.md5()
+    hashval = md5.update(s)
+    return(hashval)
+
+# Makes a string safe as a filename
+def make_safe_filename(s):
+    keepcharacters = ('_')
+    s2 = "".join(c for c in s if c.isalnum() or c in keepcharacters)
+    return s2.rstrip()
+
 
 # Turns navigable strings to normal ones
 def get_string(soup_element):
@@ -215,11 +282,11 @@ class save_progress(object):
         """ Adds all items in the dict cache to the shelf """
         for k, v in d.items():
             if k in self._shelf:
-                warn("{0}: {1} already in {2}".format(k, v, self.filename))
+                logging.warning("{0}: {1} already in {2}".format(k, v, self.filename))
             try:
                 self._shelf[k] = v
             except AttributeError as error_m:
-                warn("{0} {1} has: {2}".format(k, v, error_m))
+                logging.warning("{0} {1} has: {2}".format(k, v, error_m))
         
     def close(self):
         self.sync_dict()
@@ -316,10 +383,10 @@ def ninja_soupify_and_pass(ninja_soup_f, url, f, *args, **kwargs):
 
 # ---------------------------------- soup functions ---------------------------------------- #
 
-def soupify(url, safer=False, **kwargs):
+def soupify(url, safer=False, html_parser = 'html5lib', **kwargs):
     """ Returns a bs4 soup object from a url """
     response_for_url = try_to_urlopen(url, safer=safer, **kwargs)
-    soup = BeautifulSoup(response_for_url.text)
+    soup = BeautifulSoup(response_for_url.text, html_parser)
     # turns the page into a soup object
     return(soup)
 
@@ -336,7 +403,7 @@ def js_soupify(url, title_text = None, wait_time = 10, chromedriver_path = '../c
     from selenium.webdriver.support.ui import WebDriverWait
     
     options = webdriver.ChromeOptions()
-    options.add_argument('headless')
+#     options.add_argument('headless')
     driver = webdriver.Chrome(chromedriver_path, chrome_options = options)  # Optional argument, if not specified will search path.
     driver.get(url)
     
@@ -493,7 +560,7 @@ class ninja_soupify_simpler(object):
                 return(r)
             # If the proxy doesn't work:
             except (requests.exceptions.SSLError, requests.exceptions.ProxyError, requests.exceptions.ConnectionError, requests.exceptions.Timeout) as err:
-                warn("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d = self.proxies[self.proxy_index], error_m=err))
+                logging.warning("Proxy {d[ip]}:{d[port]} deleted because of: {error_m!s}".format(d = self.proxies[self.proxy_index], error_m=err))
                 del self.proxies[self.proxy_index]
                 dead_proxy_count += 1
         raise PageScrapeException(url=url, message="Burned through too many proxies ({!s})".format(tolerance))
@@ -606,7 +673,7 @@ class Proxifier(object):
                     requests.exceptions.ConnectionError, requests.exceptions.Timeout,
                     requests.exceptions.HTTPError, BadPageException) as err:
                 s = "Proxy {p} deleted because of: {error_m!s}".format(p=proxy["https"], error_m=err)
-                warn(s)
+                logging.warning(s)
                 self.delete_proxy(proxy_dict)
                 dead_proxy_count += 1
             
@@ -655,7 +722,7 @@ class HideMyNamePS(ProxySupplier):
         arrow = clean_find(soup, ['li',{'class': 'arrow__right'}])
         if arrow is None:
             self.proxy_url = self.og_url
-            warn("HideMyNamePS going back to original URL")
+            logging.warning("HideMyNamePS going back to original URL")
         else:
             self.proxy_url="https://hidemyna.me"+arrow.a["href"]
         return(proxies)
