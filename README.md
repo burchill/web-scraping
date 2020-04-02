@@ -1,3 +1,12 @@
+# Update!
+
+Hey to anyone using this! Starting April 2nd, 2020, I will be abandoning this repo for a private, forked version of it. Every so often, I might make some updates to this repo if they're general enough, but I'll probably forget to, if I'm honest.  There's still good stuff here, but I no longer want to deal with the hassle of constantly guessing what should be public and what should be private.
+
+Thanks!
+
+----
+
+
 # My web-scraping projects
 
 This is (most) of the code of my personal web-scraping Python projects.  Feel free to use the source code to learn from, but if you borrow stuff, please source me.
